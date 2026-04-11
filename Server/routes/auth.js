@@ -7,10 +7,10 @@ const {
   getMe, 
   verifyEmail,
   resendVerification,
+  oauthLogin,
   googleCallback,
   facebookCallback,
-  twitterCallback,
-  oauthLogin 
+  twitterCallback
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -19,24 +19,25 @@ router.post('/register', register);
 router.post('/login', login);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/resend-verification', resendVerification);
-// Add this route
+
+// OAuth login via Firebase
 router.post('/oauth-login', oauthLogin);
 
-// Google OAuth
+// Google OAuth (Passport)
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 router.get('/google/callback', 
   passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth_failed`, session: false }),
   googleCallback
 );
 
-// Facebook OAuth
+// Facebook OAuth (Passport)
 router.get('/facebook', passport.authenticate('facebook', { scope: ['email'] }));
 router.get('/facebook/callback',
   passport.authenticate('facebook', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth_failed`, session: false }),
   facebookCallback
 );
 
-// Twitter OAuth
+// Twitter OAuth (Passport)
 router.get('/twitter', passport.authenticate('twitter'));
 router.get('/twitter/callback',
   passport.authenticate('twitter', { failureRedirect: `${process.env.FRONTEND_URL}/login?error=oauth_failed`, session: false }),

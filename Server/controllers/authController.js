@@ -2,6 +2,10 @@ const User = require('../models/User');
 const crypto = require('crypto');
 const { sendVerificationEmail, sendWelcomeEmail } = require('../utils/sendEmail');
 
+// =============================================
+// REGISTRATION & EMAIL VERIFICATION
+// =============================================
+
 // @desc    Register user
 // @route   POST /api/auth/register
 // @access  Public
@@ -19,6 +23,23 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Validate email format
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+
     // Check if user exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -33,12 +54,12 @@ exports.register = async (req, res) => {
 
     // Create user with 0 balance
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password,
-      phoneNumber: phoneNumber || '',
+      phoneNumber: phoneNumber ? phoneNumber.replace(/\s/g, '') : '',
       accountNumber,
-      balance: 0, // Start with 0 balance
+      balance: 0,
       isEmailVerified: false
     });
 
@@ -47,23 +68,24 @@ exports.register = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Create verification URL
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${verificationToken}`;
 
     // Send verification email
     try {
       if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
         await sendVerificationEmail(user, verificationUrl);
         console.log('📧 Verification email sent to:', user.email);
+      } else {
+        console.log('⚠️ Email not configured. Verification URL:', verificationUrl);
       }
     } catch (emailError) {
-      console.error('❌ Failed to send verification email:', emailError);
+      console.error('❌ Failed to send verification email:', emailError.message);
     }
 
     console.log('✅ User created successfully:', { 
       id: user._id, 
       email: user.email, 
-      accountNumber: user.accountNumber,
-      balance: user.balance
+      accountNumber: user.accountNumber 
     });
 
     res.status(201).json({
@@ -75,9 +97,10 @@ exports.register = async (req, res) => {
     console.error('❌ Registration error:', err);
     
     if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
         success: false,
-        message: 'Email already exists'
+        message: `${field} already exists`
       });
     }
     
@@ -87,15 +110,25 @@ exports.register = async (req, res) => {
     });
   }
 };
+
 // @desc    Verify email
 // @route   GET /api/auth/verify-email/:token
 // @access  Public
 exports.verifyEmail = async (req, res) => {
   try {
+    const { token } = req.params;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification token is required'
+      });
+    }
+
     // Get hashed token
     const emailVerificationToken = crypto
       .createHash('sha256')
-      .update(req.params.token)
+      .update(token)
       .digest('hex');
 
     const user = await User.findOne({
@@ -118,21 +151,23 @@ exports.verifyEmail = async (req, res) => {
 
     // Send welcome email
     try {
-      await sendWelcomeEmail(user);
-      console.log('📧 Welcome email sent to:', user.email);
+      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        await sendWelcomeEmail(user);
+        console.log('📧 Welcome email sent to:', user.email);
+      }
     } catch (emailError) {
-      console.error('❌ Failed to send welcome email:', emailError);
+      console.error('❌ Failed to send welcome email:', emailError.message);
     }
 
     // Create token for auto-login
-    const token = user.getSignedJwtToken();
+    const authToken = user.getSignedJwtToken();
 
     console.log('✅ Email verified for user:', user.email);
 
     res.status(200).json({
       success: true,
       message: 'Email verified successfully!',
-      token,
+      token: authToken,
       user: {
         id: user._id,
         name: user.name,
@@ -159,6 +194,13 @@ exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
@@ -180,14 +222,16 @@ exports.resendVerification = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // Create verification URL
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email/${verificationToken}`;
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${verificationToken}`;
 
     // Send verification email
     try {
-      await sendVerificationEmail(user, verificationUrl);
-      console.log('📧 Verification email resent to:', user.email);
+      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        await sendVerificationEmail(user, verificationUrl);
+        console.log('📧 Verification email resent to:', user.email);
+      }
     } catch (emailError) {
-      console.error('❌ Failed to resend verification email:', emailError);
+      console.error('❌ Failed to resend verification email:', emailError.message);
     }
 
     res.status(200).json({
@@ -203,6 +247,10 @@ exports.resendVerification = async (req, res) => {
     });
   }
 };
+
+// =============================================
+// LOGIN & AUTHENTICATION
+// =============================================
 
 // @desc    Login user
 // @route   POST /api/auth/login
@@ -241,6 +289,14 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Check if password exists (for OAuth users)
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message: 'This account uses social login. Please sign in with Google or Facebook.'
+      });
+    }
+
     // Check if password matches
     const isMatch = await user.matchPassword(password);
 
@@ -271,7 +327,8 @@ exports.login = async (req, res) => {
         balance: user.balance,
         profilePicture: user.profilePicture,
         phoneNumber: user.phoneNumber,
-        isEmailVerified: user.isEmailVerified
+        isEmailVerified: user.isEmailVerified,
+        hasSetTransactionPin: user.hasSetTransactionPin
       }
     });
   } catch (err) {
@@ -290,6 +347,13 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
     res.status(200).json({
       success: true,
       user: {
@@ -302,6 +366,7 @@ exports.getMe = async (req, res) => {
         phoneNumber: user.phoneNumber,
         address: user.address,
         isEmailVerified: user.isEmailVerified,
+        hasSetTransactionPin: user.hasSetTransactionPin,
         createdAt: user.createdAt,
         lastLogin: user.lastLogin
       }
@@ -314,6 +379,10 @@ exports.getMe = async (req, res) => {
     });
   }
 };
+
+// =============================================
+// OAUTH LOGIN (FIREBASE)
+// =============================================
 
 // @desc    OAuth login (Google, Facebook, Twitter via Firebase)
 // @route   POST /api/auth/oauth-login
@@ -339,8 +408,8 @@ exports.oauthLogin = async (req, res) => {
       const accountNumber = await User.generateAccountNumber();
       
       user = await User.create({
-        name,
-        email: email.toLowerCase(),
+        name: name.trim(),
+        email: email.toLowerCase().trim(),
         accountNumber,
         profilePicture: profilePicture || 'default-avatar.png',
         isEmailVerified: true, // OAuth emails are pre-verified
@@ -406,22 +475,28 @@ exports.oauthLogin = async (req, res) => {
     console.error('❌ OAuth login error:', err);
     res.status(500).json({
       success: false,
-      message: 'Server error during OAuth login: ' + err.message
+      message: 'Server error during OAuth login'
     });
   }
 };
+
+// =============================================
+// PASSPORT OAUTH CALLBACKS
+// =============================================
 
 // @desc    Google OAuth callback
 // @route   GET /api/auth/google/callback
 // @access  Public
 exports.googleCallback = (req, res) => {
   try {
-    const token = req.user.getSignedJwtToken();
+    if (!req.user) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
     
-    // Redirect to frontend with token
+    const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
-    console.error('Google callback error:', err);
+    console.error('❌ Google callback error:', err);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
   }
 };
@@ -431,10 +506,14 @@ exports.googleCallback = (req, res) => {
 // @access  Public
 exports.facebookCallback = (req, res) => {
   try {
+    if (!req.user) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
+    
     const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
-    console.error('Facebook callback error:', err);
+    console.error('❌ Facebook callback error:', err);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
   }
 };
@@ -444,10 +523,14 @@ exports.facebookCallback = (req, res) => {
 // @access  Public
 exports.twitterCallback = (req, res) => {
   try {
+    if (!req.user) {
+      return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
+    }
+    
     const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
-    console.error('Twitter callback error:', err);
+    console.error('❌ Twitter callback error:', err);
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
   }
 };
