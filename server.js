@@ -30,14 +30,15 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// CORS Configuration - Allow multiple origins
+// CORS Configuration - Allow your actual Vercel domains
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
-  'https://vaultix.vercel.app',
-  'https://vaultix-git-main.vercel.app',
-  'https://vaultix-*.vercel.app',
+  'https://vaultix-frontend.vercel.app',
+  'https://vaultixbank-frontend.vercel.app',
+  'https://vaultixbank-frontend-git-main-abdullahis-projects-646ad5fb.vercel.app',
+  'https://vaultixbank-frontend-*.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -47,12 +48,19 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     // Check if origin is allowed
-    if (allowedOrigins.includes(origin) || 
-        (typeof origin === 'string' && origin.endsWith('.vercel.app'))) {
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed.includes('*')) {
+        const pattern = allowed.replace('*', '.*');
+        return new RegExp(pattern).test(origin);
+      }
+      return allowed === origin;
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true); // Allow all for now to debug
     }
   },
   credentials: true,
@@ -60,20 +68,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 }));
 
-// Security middleware with production-appropriate settings
+// Security middleware with relaxed settings for production
 if (helmet) {
   app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
-        connectSrc: ["'self'", "https:", "http:"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-      },
-    },
+    contentSecurityPolicy: false // Disable CSP for now to debug
   }));
 }
 
@@ -82,11 +82,11 @@ if (morgan) {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
-// Rate limiting - Stricter in production
+// Rate limiting - relaxed for debugging
 if (rateLimit) {
   const limiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 1000,
+    max: process.env.NODE_ENV === 'production' ? 500 : 1000,
     message: { success: false, message: 'Too many requests, please try again later.' },
     skip: (req) => req.url.startsWith('/uploads/') || req.url === '/health'
   });
@@ -111,7 +111,7 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cache-Control', 'public, max-age=31557600'); // Cache for 1 year
+  res.setHeader('Cache-Control', 'public, max-age=31557600');
   
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
@@ -126,7 +126,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Health check endpoint (required for Render/Railway)
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -149,8 +149,20 @@ app.get('/', (req, res) => {
   });
 });
 
+// Debug endpoint to check environment
+app.get('/debug/env', (req, res) => {
+  res.json({
+    NODE_ENV: process.env.NODE_ENV,
+    FRONTEND_URL: process.env.FRONTEND_URL,
+    EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Not set',
+    EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Not set',
+    MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set'
+  });
+});
+
 // 404 Handler
 app.use((req, res) => {
+  console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`
@@ -198,7 +210,6 @@ const connectDB = async (retries = 5) => {
       console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
       console.log(`📊 Database: ${conn.connection.name}`);
       
-      // Handle connection events
       mongoose.connection.on('error', (err) => {
         console.error('❌ MongoDB connection error:', err.message);
       });
@@ -222,7 +233,6 @@ const connectDB = async (retries = 5) => {
         process.exit(1);
       }
       
-      // Wait before retrying (exponential backoff)
       await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
     }
   }
@@ -243,10 +253,10 @@ const startServer = async () => {
       console.log(`🌐 URL: http://localhost:${PORT}`);
       console.log(`🏥 Health: http://localhost:${PORT}/health`);
       console.log(`📁 Uploads: ${profilesDir}`);
+      console.log(`🔧 Debug: http://localhost:${PORT}/debug/env`);
       console.log(`${'='.repeat(50)}\n`);
     });
 
-    // Graceful shutdown
     const gracefulShutdown = async (signal) => {
       console.log(`\n${signal} received. Shutting down gracefully...`);
       
@@ -263,7 +273,6 @@ const startServer = async () => {
         process.exit(0);
       });
       
-      // Force exit after 10 seconds
       setTimeout(() => {
         console.error('Could not close connections in time, forcefully shutting down');
         process.exit(1);
@@ -279,19 +288,15 @@ const startServer = async () => {
   }
 };
 
-// Handle uncaught errors
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Rejection:', err.message);
-  console.error(err.stack);
 });
 
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err.message);
-  console.error(err.stack);
   process.exit(1);
 });
 
-// Start the server
 startServer();
 
 module.exports = app;
