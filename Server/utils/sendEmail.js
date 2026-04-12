@@ -1,45 +1,46 @@
 const nodemailer = require('nodemailer');
 
-// Check if Brevo is configured
-const isBrevoConfigured = () => {
-  return process.env.BREVO_API_KEY && process.env.BREVO_API_KEY !== 'your_brevo_api_key_here';
-};
-
-// Send via Brevo API (production) - FIXED VERSION
+// Send via Brevo using simple fetch (no SDK issues!)
 const sendViaBrevo = async (options) => {
   const { email, subject, message, html } = options;
   
   try {
-    // ✅ FIXED: Correct way to import and use Brevo
-    const Brevo = require('@getbrevo/brevo');
-    
-    // Create API client
-    const apiClient = new Brevo.ApiClient();
-    apiClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
-    
-    const apiInstance = new Brevo.TransactionalEmailsApi(apiClient);
-    
-    const sendSmtpEmail = {
-      to: [{ email: email }],
-      sender: { 
-        email: process.env.EMAIL_FROM || 'noreply@vaultix.com',
-        name: 'Vaultix'
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': process.env.BREVO_API_KEY
       },
-      subject: subject,
-      textContent: message,
-      htmlContent: html || message
-    };
+      body: JSON.stringify({
+        sender: { 
+          email: process.env.EMAIL_FROM || 'abdulwarisabdullahi52@gmail.com',
+          name: 'Vaultix'
+        },
+        to: [{ email: email }],
+        subject: subject,
+        textContent: message,
+        htmlContent: html || message
+      })
+    });
+
+    const data = await response.json();
     
-    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log('✅ Email sent via Brevo! Message ID:', data.messageId);
-    return { success: true, provider: 'brevo', messageId: data.messageId };
+    if (response.ok) {
+      console.log('✅ Email sent via Brevo! Message ID:', data.messageId);
+      return { success: true, provider: 'brevo', messageId: data.messageId };
+    } else {
+      console.error('❌ Brevo API error:', data);
+      return { success: false, error: data.message, provider: 'brevo' };
+    }
   } catch (error) {
     console.error('❌ Brevo failed:', error.message);
-    if (error.response) {
-      console.error('Brevo response:', error.response.body || error.response.text);
-    }
     return { success: false, error: error.message, provider: 'brevo' };
   }
+};
+
+// Check if Brevo is configured
+const isBrevoConfigured = () => {
+  return process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.length > 10;
 };
 
 // Create local transporter for development
@@ -72,7 +73,7 @@ const createLocalTransporter = async () => {
   }
 };
 
-// Send via local SMTP (development)
+// Send via local SMTP
 const sendViaLocal = async (options) => {
   const { email, subject, message, html } = options;
   
@@ -125,12 +126,11 @@ const sendVerificationEmail = async (user, verificationUrl) => {
     <head>
       <meta charset="UTF-8">
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .container { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; }
         .logo { font-size: 32px; font-weight: bold; color: #4f46e5; text-align: center; margin-bottom: 30px; }
         .button { display: inline-block; padding: 14px 28px; background: #4f46e5; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
         .link-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 20px 0; word-break: break-all; }
-        .warning { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px; }
         .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #9ca3af; text-align: center; }
       </style>
     </head>
@@ -144,7 +144,7 @@ const sendVerificationEmail = async (user, verificationUrl) => {
         </div>
         <p>Or copy and paste this link:</p>
         <div class="link-box">${verificationUrl}</div>
-        <div class="warning">⏰ This link expires in 24 hours.</div>
+        <p style="color: #f59e0b;">⏰ This link expires in 24 hours.</p>
         <div class="footer">© ${new Date().getFullYear()} Vaultix. All rights reserved.</div>
       </div>
     </body>
@@ -167,8 +167,8 @@ const sendWelcomeEmail = async (user) => {
     <head>
       <meta charset="UTF-8">
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .container { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; }
         .logo { font-size: 32px; font-weight: bold; color: #4f46e5; text-align: center; margin-bottom: 30px; }
         .account-box { background: #f0fdf4; border: 1px solid #22c55e; border-radius: 8px; padding: 20px; margin: 20px 0; }
         .account-number { font-size: 24px; font-family: monospace; letter-spacing: 2px; }
