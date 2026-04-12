@@ -5,28 +5,30 @@ const isBrevoConfigured = () => {
   return process.env.BREVO_API_KEY && process.env.BREVO_API_KEY !== 'your_brevo_api_key_here';
 };
 
-// Send via Brevo API (production)
+// Send via Brevo API (production) - FIXED VERSION
 const sendViaBrevo = async (options) => {
   const { email, subject, message, html } = options;
   
   try {
+    // ✅ FIXED: Correct way to import and use Brevo
     const Brevo = require('@getbrevo/brevo');
     
-    const defaultClient = Brevo.ApiClient.instance;
-    const apiKey = defaultClient.authentications['api-key'];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
+    // Create API client
+    const apiClient = new Brevo.ApiClient();
+    apiClient.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
     
-    const apiInstance = new Brevo.TransactionalEmailsApi();
+    const apiInstance = new Brevo.TransactionalEmailsApi(apiClient);
     
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-    sendSmtpEmail.to = [{ email: email }];
-    sendSmtpEmail.sender = { 
-      email: process.env.EMAIL_FROM || 'noreply@vaultix.com',
-      name: 'Vaultix'
+    const sendSmtpEmail = {
+      to: [{ email: email }],
+      sender: { 
+        email: process.env.EMAIL_FROM || 'noreply@vaultix.com',
+        name: 'Vaultix'
+      },
+      subject: subject,
+      textContent: message,
+      htmlContent: html || message
     };
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.textContent = message;
-    sendSmtpEmail.htmlContent = html || message;
     
     const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('✅ Email sent via Brevo! Message ID:', data.messageId);
