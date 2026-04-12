@@ -1,57 +1,50 @@
+const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
 
-// Send via Brevo using simple fetch (no SDK issues!)
-const sendViaBrevo = async (options) => {
+// Check if Resend is configured
+const isResendConfigured = () => {
+  return process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.startsWith('re_');
+};
+
+// Send via Resend (production)
+const sendViaResend = async (options) => {
   const { email, subject, message, html } = options;
   
   try {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'api-key': process.env.BREVO_API_KEY
-      },
-      body: JSON.stringify({
-        sender: { 
-          email: process.env.EMAIL_FROM || 'abdulwarisabdullahi52@gmail.com',
-          name: 'Vaultix'
-        },
-        to: [{ email: email }],
-        subject: subject,
-        textContent: message,
-        htmlContent: html || message
-      })
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    
+    const { data, error } = await resend.emails.send({
+      from: 'Vaultix <onboarding@resend.dev>', // ✅ FREE test sender
+      to: [email],
+      subject: subject,
+      text: message,
+      html: html || message,
     });
 
-    const data = await response.json();
-    
-    if (response.ok) {
-      console.log('✅ Email sent via Brevo! Message ID:', data.messageId);
-      return { success: true, provider: 'brevo', messageId: data.messageId };
-    } else {
-      console.error('❌ Brevo API error:', data);
-      return { success: false, error: data.message, provider: 'brevo' };
+    if (error) {
+      console.error('❌ Resend error:', error);
+      return { success: false, error: error.message, provider: 'resend' };
     }
+
+    console.log('✅ Email sent via Resend! ID:', data.id);
+    return { success: true, provider: 'resend', messageId: data.id };
   } catch (error) {
-    console.error('❌ Brevo failed:', error.message);
-    return { success: false, error: error.message, provider: 'brevo' };
+    console.error('❌ Resend failed:', error.message);
+    return { success: false, error: error.message, provider: 'resend' };
   }
 };
 
-// Check if Brevo is configured
-const isBrevoConfigured = () => {
-  return process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.length > 10;
-};
-
-// Create local transporter for development
-const createLocalTransporter = async () => {
+// Send via local SMTP (development fallback)
+const sendViaLocal = async (options) => {
+  const { email, subject, message, html } = options;
+  
   try {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      return null;
+      return { success: false, message: 'Local email not configured' };
     }
 
     const cleanPassword = process.env.EMAIL_PASS.replace(/\s+/g, '');
-
+    
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
@@ -60,29 +53,8 @@ const createLocalTransporter = async () => {
         user: process.env.EMAIL_USER,
         pass: cleanPassword,
       },
-      tls: { rejectUnauthorized: false },
-      family: 4
     });
 
-    await transporter.verify();
-    console.log('✅ Local email transporter ready');
-    return transporter;
-  } catch (error) {
-    console.error('❌ Local email failed:', error.message);
-    return null;
-  }
-};
-
-// Send via local SMTP
-const sendViaLocal = async (options) => {
-  const { email, subject, message, html } = options;
-  
-  const transporter = await createLocalTransporter();
-  if (!transporter) {
-    return { success: false, message: 'Local email not configured' };
-  }
-
-  try {
     const mailOptions = {
       from: `"Vaultix" <${process.env.EMAIL_FROM || 'noreply@vaultix.com'}>`,
       to: email,
@@ -107,13 +79,13 @@ const sendEmail = async (options) => {
   console.log(`📧 Sending email to: ${email}`);
   console.log(`   Subject: ${subject}`);
 
-  // Try Brevo first (production)
-  if (isBrevoConfigured()) {
-    console.log('📧 Using Brevo API...');
-    return await sendViaBrevo(options);
+  // Try Resend first (production)
+  if (isResendConfigured()) {
+    console.log('📧 Using Resend API...');
+    return await sendViaResend(options);
   }
 
-  // Fallback to local SMTP (development)
+  // Fallback to local SMTP
   console.log('📧 Using local SMTP...');
   return await sendViaLocal(options);
 };
