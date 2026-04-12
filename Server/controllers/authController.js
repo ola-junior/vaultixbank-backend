@@ -52,7 +52,7 @@ exports.register = async (req, res) => {
     // Generate account number
     const accountNumber = await User.generateAccountNumber();
 
-    // Create user with 0 balance
+    // Create user (NOT verified yet)
     const user = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
@@ -71,36 +71,40 @@ exports.register = async (req, res) => {
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${verificationToken}`;
 
     // Send verification email
+    let emailSent = false;
     try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        await sendVerificationEmail(user, verificationUrl);
+      const emailResult = await sendVerificationEmail(user, verificationUrl);
+      emailSent = emailResult.success;
+      if (emailSent) {
         console.log('📧 Verification email sent to:', user.email);
       } else {
-        console.log('⚠️ Email not configured. Verification URL:', verificationUrl);
+        console.log('⚠️ Email sending failed, but user created');
       }
     } catch (emailError) {
-      console.error('❌ Failed to send verification email:', emailError.message);
+      console.error('❌ Email error:', emailError.message);
     }
 
     console.log('✅ User created successfully:', { 
       id: user._id, 
       email: user.email, 
-      accountNumber: user.accountNumber 
+      accountNumber: user.accountNumber,
+      emailSent
     });
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Please check your email to verify your account.',
+      message: emailSent 
+        ? 'Registration successful! Please check your email to verify your account.'
+        : 'Registration successful! Please check your email (or spam folder) to verify your account.',
       verificationUrl: process.env.NODE_ENV === 'development' ? verificationUrl : undefined
     });
   } catch (err) {
     console.error('❌ Registration error:', err);
     
     if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
         success: false,
-        message: `${field} already exists`
+        message: 'Email already exists'
       });
     }
     
@@ -139,7 +143,7 @@ exports.verifyEmail = async (req, res) => {
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid or expired verification token'
+        message: 'Invalid or expired verification link. Please register again.'
       });
     }
 
@@ -149,15 +153,10 @@ exports.verifyEmail = async (req, res) => {
     user.emailVerificationExpire = undefined;
     await user.save();
 
-    // Send welcome email
-    try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        await sendWelcomeEmail(user);
-        console.log('📧 Welcome email sent to:', user.email);
-      }
-    } catch (emailError) {
-      console.error('❌ Failed to send welcome email:', emailError.message);
-    }
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(user).catch(err => {
+      console.error('❌ Welcome email failed:', err.message);
+    });
 
     // Create token for auto-login
     const authToken = user.getSignedJwtToken();
@@ -166,7 +165,7 @@ exports.verifyEmail = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Email verified successfully!',
+      message: 'Email verified successfully! Redirecting to dashboard...',
       token: authToken,
       user: {
         id: user._id,
@@ -206,14 +205,14 @@ exports.resendVerification = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'No account found with this email'
       });
     }
 
     if (user.isEmailVerified) {
       return res.status(400).json({
         success: false,
-        message: 'Email is already verified'
+        message: 'Email is already verified. You can login.'
       });
     }
 
@@ -225,18 +224,20 @@ exports.resendVerification = async (req, res) => {
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email/${verificationToken}`;
 
     // Send verification email
-    try {
-      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        await sendVerificationEmail(user, verificationUrl);
-        console.log('📧 Verification email resent to:', user.email);
-      }
-    } catch (emailError) {
-      console.error('❌ Failed to resend verification email:', emailError.message);
+    const emailResult = await sendVerificationEmail(user, verificationUrl);
+    
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send verification email. Please try again.'
+      });
     }
+
+    console.log('📧 Verification email resent to:', user.email);
 
     res.status(200).json({
       success: true,
-      message: 'Verification email resent successfully!',
+      message: 'Verification email sent! Please check your inbox.',
       verificationUrl: process.env.NODE_ENV === 'development' ? verificationUrl : undefined
     });
   } catch (err) {
@@ -261,11 +262,10 @@ exports.login = async (req, res) => {
 
     console.log('🔐 Login attempt:', { email });
 
-    // Validate email & password
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide an email and password'
+        message: 'Please provide email and password'
       });
     }
 
@@ -275,7 +275,7 @@ exports.login = async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid email or password'
       });
     }
 
@@ -303,7 +303,7 @@ exports.login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid email or password'
       });
     }
 
@@ -404,7 +404,6 @@ exports.oauthLogin = async (req, res) => {
     let user = await User.findOne({ email: email.toLowerCase() });
     
     if (!user) {
-      // Create new user
       const accountNumber = await User.generateAccountNumber();
       
       user = await User.create({
@@ -412,24 +411,18 @@ exports.oauthLogin = async (req, res) => {
         email: email.toLowerCase().trim(),
         accountNumber,
         profilePicture: profilePicture || 'default-avatar.png',
-        isEmailVerified: true, // OAuth emails are pre-verified
+        isEmailVerified: true,
         authProvider: provider,
         balance: 0
       });
       
-      // Set the appropriate provider ID
-      if (provider === 'google') {
-        user.googleId = providerId;
-      } else if (provider === 'facebook') {
-        user.facebookId = providerId;
-      } else if (provider === 'twitter') {
-        user.twitterId = providerId;
-      }
-      await user.save();
+      if (provider === 'google') user.googleId = providerId;
+      else if (provider === 'facebook') user.facebookId = providerId;
+      else if (provider === 'twitter') user.twitterId = providerId;
       
+      await user.save();
       console.log('✅ New user created via OAuth:', user.email);
     } else {
-      // Update existing user with OAuth info if needed
       let updated = false;
       
       if (provider === 'google' && !user.googleId) {
@@ -452,7 +445,6 @@ exports.oauthLogin = async (req, res) => {
       console.log('✅ Existing user logged in via OAuth:', user.email);
     }
     
-    // Create token
     const token = user.getSignedJwtToken();
     
     res.status(200).json({
@@ -484,15 +476,11 @@ exports.oauthLogin = async (req, res) => {
 // PASSPORT OAUTH CALLBACKS
 // =============================================
 
-// @desc    Google OAuth callback
-// @route   GET /api/auth/google/callback
-// @access  Public
 exports.googleCallback = (req, res) => {
   try {
     if (!req.user) {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
     }
-    
     const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
@@ -501,15 +489,11 @@ exports.googleCallback = (req, res) => {
   }
 };
 
-// @desc    Facebook OAuth callback
-// @route   GET /api/auth/facebook/callback
-// @access  Public
 exports.facebookCallback = (req, res) => {
   try {
     if (!req.user) {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
     }
-    
     const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
@@ -518,15 +502,11 @@ exports.facebookCallback = (req, res) => {
   }
 };
 
-// @desc    Twitter OAuth callback
-// @route   GET /api/auth/twitter/callback
-// @access  Public
 exports.twitterCallback = (req, res) => {
   try {
     if (!req.user) {
       return res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
     }
-    
     const token = req.user.getSignedJwtToken();
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   } catch (err) {
