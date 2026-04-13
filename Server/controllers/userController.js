@@ -82,7 +82,7 @@ exports.getProfile = async (req, res) => {
 // @access  Private
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, phoneNumber, address } = req.body;
+    const { name, phoneNumber, address, profilePicture } = req.body;
     
     // Validate name
     if (name !== undefined && (name.trim().length < 3 || name.trim().length > 50)) {
@@ -104,6 +104,7 @@ exports.updateProfile = async (req, res) => {
     if (name !== undefined) fieldsToUpdate.name = name.trim();
     if (phoneNumber !== undefined) fieldsToUpdate.phoneNumber = phoneNumber.replace(/\s/g, '');
     if (address !== undefined) fieldsToUpdate.address = address.trim();
+    if (profilePicture !== undefined) fieldsToUpdate.profilePicture = profilePicture; // Cloudinary URL or null
     
     // Check if there's anything to update
     if (Object.keys(fieldsToUpdate).length === 0) {
