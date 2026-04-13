@@ -52,7 +52,11 @@ const UserSchema = new mongoose.Schema({
   },
   profilePicture: {
     type: String,
-    default: null  // null means show initials
+    default: null
+  },
+  bannerImage: {
+    type: String,
+    default: null
   },
   isEmailVerified: {
     type: Boolean,
