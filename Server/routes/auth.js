@@ -10,7 +10,8 @@ const {
   oauthLogin,
   googleCallback,
   facebookCallback,
-  twitterCallback
+  twitterCallback,
+  syncUser
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -22,6 +23,7 @@ router.post('/resend-verification', resendVerification);
 
 // OAuth login via Firebase
 router.post('/oauth-login', oauthLogin);
+router.post('/sync-user', syncUser);
 
 // Google OAuth (Passport)
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));

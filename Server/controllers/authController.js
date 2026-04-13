@@ -273,3 +273,65 @@ exports.twitterCallback = (req, res) => {
     res.redirect(`${process.env.FRONTEND_URL}/login?error=oauth_failed`);
   }
 };
+
+// @desc    Sync Firebase user to backend (create or update)
+// @route   POST /api/auth/sync-user
+// @access  Public
+exports.syncUser = async (req, res) => {
+  try {
+    const { email, password, firebaseUid, name, profilePicture, provider } = req.body;
+    
+    console.log('🔄 Syncing user:', { email, provider: provider || 'local' });
+    
+    let user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Create new user
+      const accountNumber = await User.generateAccountNumber();
+      user = await User.create({
+        name: name || email.split('@')[0],
+        email: email.toLowerCase(),
+        password: password || undefined, // OAuth might not have password
+        accountNumber,
+        firebaseUid,
+        profilePicture: profilePicture || 'default-avatar.png',
+        isEmailVerified: true, // Firebase already verified
+        authProvider: provider || 'local'
+      });
+      
+      if (provider === 'google') user.googleId = firebaseUid;
+      else if (provider === 'facebook') user.facebookId = firebaseUid;
+      else if (provider === 'twitter') user.twitterId = firebaseUid;
+      
+      await user.save();
+      console.log('✅ New user synced from Firebase:', user.email);
+    } else {
+      // Update existing user
+      if (password) user.password = password; // Update password if provided
+      if (firebaseUid) user.firebaseUid = firebaseUid;
+      if (profilePicture) user.profilePicture = profilePicture;
+      user.isEmailVerified = true;
+      
+      if (provider === 'google') user.googleId = firebaseUid;
+      else if (provider === 'facebook') user.facebookId = firebaseUid;
+      else if (provider === 'twitter') user.twitterId = firebaseUid;
+      
+      await user.save();
+      console.log('✅ User updated from Firebase:', user.email);
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'User synced successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        accountNumber: user.accountNumber,
+        balance: user.balance
+      }
+    });
+  } catch (err) {
+    console.error('❌ Sync error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
