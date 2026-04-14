@@ -20,6 +20,8 @@ const authRoutes = require('./Server/routes/auth');
 const userRoutes = require('./Server/routes/user');
 const transactionRoutes = require('./Server/routes/transaction');
 const notificationRoutes = require('./Server/routes/notification');
+// ❌ REMOVE THIS LINE - security routes are already in userRoutes
+// const securityRoutes = require('./Server/routes/security');
 
 const app = express();
 
@@ -121,6 +123,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
+// ❌ REMOVE THIS - security routes are already in userRoutes
+// app.use('/api/security', securityRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -224,6 +228,16 @@ const startServer = async () => {
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 URL: http://localhost:${PORT}`);
       console.log(`🏥 Health: http://localhost:${PORT}/health`);
+      
+      // Log all registered routes for debugging
+      console.log(`\n📋 Registered Routes:`);
+      console.log(`   POST /api/user/set-pin`);
+      console.log(`   PUT  /api/user/change-pin`);
+      console.log(`   POST /api/user/verify-pin`);
+      console.log(`   GET  /api/user/has-pin`);
+      console.log(`   POST /api/user/2fa/enable`);
+      console.log(`   POST /api/user/2fa/verify`);
+      console.log(`   POST /api/user/2fa/disable`);
       console.log(`${'='.repeat(50)}\n`);
     });
 
