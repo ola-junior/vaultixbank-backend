@@ -28,7 +28,10 @@
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
-    "passport-twitter": "^0.1.5"
+    "passport-twitter": "^0.1.5",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
+    "ua-parser-js": "^2.0.9"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

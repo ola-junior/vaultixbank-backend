@@ -7,16 +7,16 @@ const bcrypt = require('bcryptjs');
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 const profilesDir = path.join(uploadsDir, 'profiles');
+const bannersDir = path.join(uploadsDir, 'banners');
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(profilesDir)) {
-  fs.mkdirSync(profilesDir, { recursive: true });
-}
+[uploadsDir, profilesDir, bannersDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
+// Configure multer for profile pictures
+const profileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, profilesDir);
   },
@@ -24,6 +24,18 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, 'profile-' + uniqueSuffix + ext);
+  }
+});
+
+// Configure multer for banner images
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, bannersDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, 'banner-' + uniqueSuffix + ext);
   }
 });
 
@@ -40,10 +52,16 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({ 
-  storage: storage,
+  storage: profileStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: fileFilter
 }).single('profilePicture');
+
+const bannerUpload = multer({ 
+  storage: bannerStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: fileFilter
+}).single('bannerImage');
 
 // =============================================
 // PROFILE CONTROLLERS
@@ -55,7 +73,7 @@ const upload = multer({
 exports.getProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
-      .select('-__v -password -transactionPin -emailVerificationToken -emailVerificationExpire -passwordResetToken -passwordResetExpire');
+      .select('-__v -password -transactionPin -twoFactorSecret -emailVerificationToken -emailVerificationExpire -passwordResetToken -passwordResetExpire');
     
     if (!user) {
       return res.status(404).json({
@@ -64,9 +82,29 @@ exports.getProfile = async (req, res) => {
       });
     }
     
+    // Format response
+    const profileData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      address: user.address,
+      profilePicture: user.profilePicture,
+      bannerImage: user.bannerImage,
+      accountNumber: user.accountNumber,
+      balance: user.balance,
+      accountType: user.accountType || 'Premium Savings',
+      accountStatus: user.accountStatus || 'Active',
+      isEmailVerified: user.isEmailVerified,
+      twoFactorEnabled: user.twoFactorEnabled,
+      hasPin: user.hasSetTransactionPin,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+    
     res.status(200).json({
       success: true,
-      data: user
+      data: profileData
     });
   } catch (err) {
     console.error('❌ Get profile error:', err);
@@ -85,15 +123,17 @@ exports.updateProfile = async (req, res) => {
     const { name, phoneNumber, address, profilePicture, bannerImage } = req.body;
     
     // Validate name
-    if (name !== undefined && (name.trim().length < 3 || name.trim().length > 50)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name must be between 3 and 50 characters'
-      });
+    if (name !== undefined) {
+      if (name.trim().length < 3 || name.trim().length > 50) {
+        return res.status(400).json({
+          success: false,
+          message: 'Name must be between 3 and 50 characters'
+        });
+      }
     }
     
     // Validate phone number (if provided)
-    if (phoneNumber && !/^[0-9]{10,15}$/.test(phoneNumber.replace(/\s/g, ''))) {
+    if (phoneNumber && !/^[0-9+\-\s]{10,15}$/.test(phoneNumber.replace(/\s/g, ''))) {
       return res.status(400).json({
         success: false,
         message: 'Invalid phone number format'
@@ -103,7 +143,7 @@ exports.updateProfile = async (req, res) => {
     const fieldsToUpdate = {};
     if (name !== undefined) fieldsToUpdate.name = name.trim();
     if (phoneNumber !== undefined) fieldsToUpdate.phoneNumber = phoneNumber.replace(/\s/g, '');
-    if (address !== undefined) fieldsToUpdate.address = address.trim();
+    if (address !== undefined) fieldsToUpdate.address = address ? address.trim() : '';
     if (profilePicture !== undefined) fieldsToUpdate.profilePicture = profilePicture;
     if (bannerImage !== undefined) fieldsToUpdate.bannerImage = bannerImage;
     
@@ -122,7 +162,7 @@ exports.updateProfile = async (req, res) => {
         new: true,
         runValidators: true
       }
-    ).select('-__v -password -transactionPin');
+    ).select('-__v -password -transactionPin -twoFactorSecret');
 
     if (!user) {
       return res.status(404).json({
@@ -136,7 +176,13 @@ exports.updateProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      data: user
+      data: {
+        name: user.name,
+        phoneNumber: user.phoneNumber,
+        address: user.address,
+        profilePicture: user.profilePicture,
+        bannerImage: user.bannerImage
+      }
     });
   } catch (err) {
     console.error('❌ Update profile error:', err);
@@ -204,7 +250,9 @@ exports.uploadProfilePicture = (req, res) => {
       }
       
       // Delete old profile picture if not default
-      if (user.profilePicture && user.profilePicture !== 'default-avatar.png') {
+      if (user.profilePicture && 
+          user.profilePicture !== 'default-avatar.png' && 
+          !user.profilePicture.startsWith('http')) {
         const oldPath = path.join(profilesDir, user.profilePicture);
         if (fs.existsSync(oldPath)) {
           try {
@@ -217,7 +265,8 @@ exports.uploadProfilePicture = (req, res) => {
       }
 
       // Update user with new profile picture
-      user.profilePicture = req.file.filename;
+      const profilePictureUrl = `/uploads/profiles/${req.file.filename}`;
+      user.profilePicture = profilePictureUrl;
       await user.save();
 
       console.log('✅ Profile picture uploaded for user:', user.email, '→', req.file.filename);
@@ -226,8 +275,7 @@ exports.uploadProfilePicture = (req, res) => {
         success: true,
         message: 'Profile picture updated successfully',
         data: {
-          profilePicture: user.profilePicture,
-          url: `/uploads/profiles/${user.profilePicture}`
+          profilePicture: profilePictureUrl
         }
       });
     } catch (error) {
@@ -264,9 +312,11 @@ exports.deleteProfilePicture = async (req, res) => {
       });
     }
     
-    // Delete current profile picture if not default
-    if (user.profilePicture && user.profilePicture !== 'default-avatar.png') {
-      const oldPath = path.join(profilesDir, user.profilePicture);
+    // Delete current profile picture if not default and not external URL
+    if (user.profilePicture && 
+        user.profilePicture !== 'default-avatar.png' && 
+        !user.profilePicture.startsWith('http')) {
+      const oldPath = path.join(profilesDir, path.basename(user.profilePicture));
       if (fs.existsSync(oldPath)) {
         try {
           fs.unlinkSync(oldPath);
@@ -334,7 +384,7 @@ exports.setTransactionPin = async (req, res) => {
     }
 
     // Prevent common weak PINs
-    const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234'];
+    const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(pin)) {
       return res.status(400).json({
         success: false,
@@ -413,7 +463,7 @@ exports.changeTransactionPin = async (req, res) => {
     }
 
     // Prevent common weak PINs
-    const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234'];
+    const weakPins = ['0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321'];
     if (weakPins.includes(newPin)) {
       return res.status(400).json({
         success: false,
@@ -510,16 +560,11 @@ exports.verifyTransactionPin = async (req, res) => {
 
     // Verify PIN
     const isMatch = await user.matchTransactionPin(pin);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid PIN'
-      });
-    }
-
+    
     res.status(200).json({
       success: true,
-      message: 'PIN verified successfully'
+      verified: isMatch,
+      message: isMatch ? 'PIN verified successfully' : 'Invalid PIN'
     });
   } catch (err) {
     console.error('❌ Verify PIN error:', err);
@@ -591,6 +636,19 @@ exports.changePassword = async (req, res) => {
       });
     }
 
+    // Check password strength
+    const hasUpperCase = /[A-Z]/.test(newPassword);
+    const hasLowerCase = /[a-z]/.test(newPassword);
+    const hasNumbers = /\d/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
+    
+    if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must contain uppercase, lowercase, number, and special character'
+      });
+    }
+
     // Get user with password field
     const user = await User.findById(userId).select('+password');
 
@@ -610,8 +668,18 @@ exports.changePassword = async (req, res) => {
       });
     }
 
+    // Check if new password is same as old
+    const isSame = await bcrypt.compare(newPassword, user.password);
+    if (isSame) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password cannot be the same as current password'
+      });
+    }
+
     // Update password
     user.password = newPassword;
+    user.passwordUpdatedAt = Date.now();
     await user.save();
 
     console.log('✅ Password changed for user:', userId);

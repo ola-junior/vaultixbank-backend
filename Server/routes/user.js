@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const { protect } = require('../middleware/auth');
+
+// Import user controllers
 const { 
   getProfile, 
   updateProfile, 
@@ -11,27 +14,63 @@ const {
   hasTransactionPin,
   changePassword
 } = require('../controllers/userController');
-const { protect } = require('../middleware/auth');
+
+// Import security controllers
+const {
+  enable2FA,
+  verify2FA,
+  disable2FA,
+  getSecurityInfo,
+  getSessions,
+  logoutSession,
+  logoutAllDevices,
+  generateBackupCodes
+} = require('../controllers/securityController');
 
 // All routes require authentication
 router.use(protect);
 
-// Profile routes
+// =============================================
+// PROFILE ROUTES
+// =============================================
 router.route('/profile')
   .get(getProfile)
   .put(updateProfile);
 
-// Profile picture routes
 router.post('/profile-picture', uploadProfilePicture);
 router.delete('/profile-picture', deleteProfilePicture);
 
-// Transaction PIN routes
+// =============================================
+// TRANSACTION PIN ROUTES
+// =============================================
 router.post('/set-pin', setTransactionPin);
 router.put('/change-pin', changeTransactionPin);
 router.post('/verify-pin', verifyTransactionPin);
 router.get('/has-pin', hasTransactionPin);
 
-// Password management
+// =============================================
+// PASSWORD MANAGEMENT
+// =============================================
 router.put('/change-password', changePassword);
+
+// =============================================
+// TWO-FACTOR AUTHENTICATION (2FA)
+// =============================================
+router.post('/2fa/enable', enable2FA);
+router.post('/2fa/verify', verify2FA);
+router.post('/2fa/disable', disable2FA);
+router.post('/2fa/backup-codes', generateBackupCodes);
+
+// =============================================
+// SECURITY INFO
+// =============================================
+router.get('/security-info', getSecurityInfo);
+
+// =============================================
+// SESSION MANAGEMENT
+// =============================================
+router.get('/sessions', getSessions);
+router.delete('/sessions/:sessionId', logoutSession);
+router.post('/logout-all', logoutAllDevices);
 
 module.exports = router;

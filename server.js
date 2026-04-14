@@ -23,14 +23,14 @@ const notificationRoutes = require('./Server/routes/notification');
 
 const app = express();
 
-// Trust proxy (required for Render/Railway deployment)
+// Trust proxy (required for deployment)
 app.set('trust proxy', 1);
 
-// Body parser with increased limits for file uploads
+// Body parser with increased limits
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// CORS Configuration - Allow your actual Vercel domains
+// CORS Configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -44,10 +44,8 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
     if (!origin) return callback(null, true);
     
-    // Check if origin is allowed
     const isAllowed = allowedOrigins.some(allowed => {
       if (allowed.includes('*')) {
         const pattern = allowed.replace('*', '.*');
@@ -60,7 +58,7 @@ app.use(cors({
       callback(null, true);
     } else {
       console.warn(`⚠️ CORS blocked: ${origin}`);
-      callback(null, true); // Allow all for now to debug
+      callback(null, true); // Allow all for debugging
     }
   },
   credentials: true,
@@ -68,12 +66,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 }));
 
-// Security middleware with relaxed settings for production
+// Security middleware
 if (helmet) {
   app.use(helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false // Disable CSP for now to debug
+    contentSecurityPolicy: false
   }));
 }
 
@@ -82,10 +80,10 @@ if (morgan) {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 }
 
-// Rate limiting - relaxed for debugging
+// Rate limiting
 if (rateLimit) {
   const limiter = rateLimit({
-    windowMs: 10 * 60 * 1000, // 10 minutes
+    windowMs: 10 * 60 * 1000,
     max: process.env.NODE_ENV === 'production' ? 500 : 1000,
     message: { success: false, message: 'Too many requests, please try again later.' },
     skip: (req) => req.url.startsWith('/uploads/') || req.url === '/health'
@@ -99,14 +97,12 @@ const profilesDir = path.join(uploadsDir, 'profiles');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('📁 Created uploads directory');
 }
 if (!fs.existsSync(profilesDir)) {
   fs.mkdirSync(profilesDir, { recursive: true });
-  console.log('📁 Created profiles directory');
 }
 
-// Serve static files with proper CORS headers
+// Serve static files
 app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -126,7 +122,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -144,25 +140,18 @@ app.get('/', (req, res) => {
     success: true,
     message: 'Vaultix Banking API',
     version: '1.0.0',
-    documentation: '/api',
+    endpoints: {
+      auth: '/api/auth',
+      user: '/api/user',
+      transactions: '/api/transactions',
+      notifications: '/api/notifications'
+    },
     health: '/health'
-  });
-});
-
-// Debug endpoint to check environment
-app.get('/debug/env', (req, res) => {
-  res.json({
-    NODE_ENV: process.env.NODE_ENV,
-    FRONTEND_URL: process.env.FRONTEND_URL,
-    EMAIL_USER: process.env.EMAIL_USER ? 'Set' : 'Not set',
-    EMAIL_PASS: process.env.EMAIL_PASS ? 'Set' : 'Not set',
-    MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set'
   });
 });
 
 // 404 Handler
 app.use((req, res) => {
-  console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`
@@ -188,41 +177,24 @@ app.use((err, req, res, next) => {
   });
 });
 
-// MongoDB connection with retry logic
+// MongoDB connection
 const connectDB = async (retries = 5) => {
   for (let i = 0; i < retries; i++) {
     try {
       const mongoURI = process.env.MONGODB_URI;
       
       if (!mongoURI) {
-        throw new Error('MONGODB_URI is not defined in environment variables');
+        throw new Error('MONGODB_URI is not defined');
       }
 
       console.log(`🔄 Connecting to MongoDB (attempt ${i + 1}/${retries})...`);
       
       const conn = await mongoose.connect(mongoURI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
         serverSelectionTimeoutMS: 10000,
         heartbeatFrequencyMS: 30000,
       });
       
       console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-      console.log(`📊 Database: ${conn.connection.name}`);
-      
-      mongoose.connection.on('error', (err) => {
-        console.error('❌ MongoDB connection error:', err.message);
-      });
-
-      mongoose.connection.on('disconnected', () => {
-        console.warn('⚠️ MongoDB disconnected. Attempting to reconnect...');
-        setTimeout(() => connectDB(3), 5000);
-      });
-
-      mongoose.connection.on('reconnected', () => {
-        console.log('✅ MongoDB reconnected successfully');
-      });
-      
       return conn;
       
     } catch (error) {
@@ -252,8 +224,6 @@ const startServer = async () => {
       console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🌐 URL: http://localhost:${PORT}`);
       console.log(`🏥 Health: http://localhost:${PORT}/health`);
-      console.log(`📁 Uploads: ${profilesDir}`);
-      console.log(`🔧 Debug: http://localhost:${PORT}/debug/env`);
       console.log(`${'='.repeat(50)}\n`);
     });
 
