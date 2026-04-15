@@ -1,59 +1,59 @@
 const Bill = require('../models/Bill');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
-const bcrypt = require('bcryptjs'); // ✅ ADDED
+const bcrypt = require('bcryptjs');
 
-// ─── Provider / plan catalogues ───────────────────────────────────────────────
+// ─── Professional Provider Catalogues ──────────────────────────────────────────
 const PROVIDERS = {
   airtime: [
-    { code: 'MTN', name: 'MTN Nigeria', logo: '📶' },
-    { code: 'AIRTEL', name: 'Airtel Nigeria', logo: '📶' },
-    { code: 'GLO', name: 'Glo', logo: '📶' },
-    { code: '9MOBILE', name: '9Mobile', logo: '📶' },
+    { code: 'MTN', name: 'MTN Nigeria', logo: '🟡', color: '#FFCC00' },
+    { code: 'AIRTEL', name: 'Airtel Nigeria', logo: '🔴', color: '#E40000' },
+    { code: 'GLO', name: 'Glo', logo: '🟢', color: '#00A859' },
+    { code: '9MOBILE', name: '9Mobile', logo: '🟢', color: '#00A859' },
   ],
   data: [
-    { code: 'MTN', name: 'MTN Nigeria', logo: '📡' },
-    { code: 'AIRTEL', name: 'Airtel Nigeria', logo: '📡' },
-    { code: 'GLO', name: 'Glo', logo: '📡' },
-    { code: '9MOBILE', name: '9Mobile', logo: '📡' },
+    { code: 'MTN', name: 'MTN Nigeria', logo: '🟡', color: '#FFCC00' },
+    { code: 'AIRTEL', name: 'Airtel Nigeria', logo: '🔴', color: '#E40000' },
+    { code: 'GLO', name: 'Glo', logo: '🟢', color: '#00A859' },
+    { code: '9MOBILE', name: '9Mobile', logo: '🟢', color: '#00A859' },
   ],
   tv: [
-    { code: 'DSTV', name: 'DStv', logo: '📺' },
-    { code: 'GOTV', name: 'GOtv', logo: '📺' },
-    { code: 'STARTIMES', name: 'StarTimes', logo: '📺' },
-    { code: 'SHOWMAX', name: 'Showmax', logo: '📺' },
+    { code: 'DSTV', name: 'DStv', logo: '📡', color: '#1A73E8' },
+    { code: 'GOTV', name: 'GOtv', logo: '📡', color: '#E65100' },
+    { code: 'STARTIMES', name: 'StarTimes', logo: '⭐', color: '#FF6F00' },
+    { code: 'SHOWMAX', name: 'Showmax', logo: '🎬', color: '#E50914' },
   ],
   electricity: [
-    { code: 'EKEDC', name: 'Eko Electric (EKEDC)', logo: '⚡' },
-    { code: 'IKEDC', name: 'Ikeja Electric (IKEDC)', logo: '⚡' },
-    { code: 'AEDC', name: 'Abuja Electric (AEDC)', logo: '⚡' },
-    { code: 'PHEDC', name: 'Port Harcourt Electric', logo: '⚡' },
-    { code: 'KEDCO', name: 'Kano Electric (KEDCO)', logo: '⚡' },
-    { code: 'IBEDC', name: 'Ibadan Electric (IBEDC)', logo: '⚡' },
+    { code: 'EKEDC', name: 'Eko Electric', logo: '⚡', color: '#FF9800' },
+    { code: 'IKEDC', name: 'Ikeja Electric', logo: '⚡', color: '#2196F3' },
+    { code: 'AEDC', name: 'Abuja Electric', logo: '⚡', color: '#4CAF50' },
+    { code: 'PHEDC', name: 'Port Harcourt Electric', logo: '⚡', color: '#9C27B0' },
+    { code: 'KEDCO', name: 'Kano Electric', logo: '⚡', color: '#F44336' },
+    { code: 'IBEDC', name: 'Ibadan Electric', logo: '⚡', color: '#00BCD4' },
   ],
   water: [
-    { code: 'LSWC', name: 'Lagos Water Corporation', logo: '💧' },
-    { code: 'ASWC', name: 'Abuja Water Board', logo: '💧' },
-    { code: 'PSWC', name: 'PH Water Board', logo: '💧' },
+    { code: 'LSWC', name: 'Lagos Water', logo: '💧', color: '#0288D1' },
+    { code: 'ASWC', name: 'Abuja Water', logo: '💧', color: '#00796B' },
+    { code: 'PSWC', name: 'PH Water', logo: '💧', color: '#5C6BC0' },
   ],
   education: [
-    { code: 'WAEC', name: 'WAEC', logo: '🎓' },
-    { code: 'NECO', name: 'NECO', logo: '🎓' },
-    { code: 'JAMB', name: 'JAMB/UTME', logo: '🎓' },
-    { code: 'NABTEB', name: 'NABTEB', logo: '🎓' },
+    { code: 'WAEC', name: 'WAEC', logo: '📚', color: '#1B5E20' },
+    { code: 'NECO', name: 'NECO', logo: '📖', color: '#B71C1C' },
+    { code: 'JAMB', name: 'JAMB/UTME', logo: '🎯', color: '#E65100' },
+    { code: 'NABTEB', name: 'NABTEB', logo: '📝', color: '#4A148C' },
   ],
   betting: [
-    { code: 'SPORTYBET', name: 'SportyBet', logo: '⚽' },
-    { code: 'BET9JA', name: 'Bet9ja', logo: '⚽' },
-    { code: 'BETKING', name: 'BetKing', logo: '⚽' },
-    { code: '1XBET', name: '1xBet', logo: '⚽' },
-    { code: 'NAIRABET', name: 'NairaBet', logo: '⚽' },
+    { code: 'SPORTYBET', name: 'SportyBet', logo: '⚽', color: '#E10600' },
+    { code: 'BET9JA', name: 'Bet9ja', logo: '🎲', color: '#1A237E' },
+    { code: 'BETKING', name: 'BetKing', logo: '👑', color: '#FF6F00' },
+    { code: '1XBET', name: '1xBet', logo: '🎰', color: '#0D47A1' },
+    { code: 'NAIRABET', name: 'NairaBet', logo: '💚', color: '#2E7D32' },
   ],
   internet: [
-    { code: 'SPECTRANET', name: 'Spectranet', logo: '🌐' },
-    { code: 'SMILE', name: 'Smile', logo: '🌐' },
-    { code: 'SWIFT', name: 'Swift', logo: '🌐' },
-    { code: 'IPNX', name: 'ipNX', logo: '🌐' },
+    { code: 'SPECTRANET', name: 'Spectranet', logo: '🌐', color: '#E65100' },
+    { code: 'SMILE', name: 'Smile', logo: '😊', color: '#FF9800' },
+    { code: 'SWIFT', name: 'Swift', logo: '⚡', color: '#1565C0' },
+    { code: 'IPNX', name: 'ipNX', logo: '🔷', color: '#0277BD' },
   ],
 };
 
@@ -97,8 +97,9 @@ const TV_PLANS = {
     { code: 'dstv_yanga', name: 'Yanga', amount: 2950 },
     { code: 'dstv_confam', name: 'Confam', amount: 6200 },
     { code: 'dstv_compact', name: 'Compact', amount: 10500 },
-    { code: 'dstv_compact+', name: 'Compact+', amount: 16600 },
+    { code: 'dstv_compact+', name: 'Compact Plus', amount: 16600 },
     { code: 'dstv_premium', name: 'Premium', amount: 29500 },
+    { code: 'dstv_premium_asia', name: 'Premium + Asia', amount: 34800 },
   ],
   GOTV: [
     { code: 'gotv_supa+', name: 'Supa+', amount: 6400 },
@@ -106,6 +107,7 @@ const TV_PLANS = {
     { code: 'gotv_max', name: 'Max', amount: 4150 },
     { code: 'gotv_jolli', name: 'Jolli', amount: 2800 },
     { code: 'gotv_jinja', name: 'Jinja', amount: 1900 },
+    { code: 'gotv_lite', name: 'Lite', amount: 900 },
   ],
   STARTIMES: [
     { code: 'st_nova', name: 'Nova', amount: 1200 },
@@ -114,9 +116,13 @@ const TV_PLANS = {
     { code: 'st_classic', name: 'Classic', amount: 3300 },
     { code: 'st_super', name: 'Super', amount: 5300 },
   ],
+  SHOWMAX: [
+    { code: 'showmax_mobile', name: 'Mobile', amount: 1200 },
+    { code: 'showmax_standard', name: 'Standard', amount: 2500 },
+  ],
 };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Helper Functions ──────────────────────────────────────────────────────────
 const generateToken = () => {
   return Array.from({ length: 20 }, () => Math.floor(Math.random() * 10))
     .join('')
@@ -124,11 +130,25 @@ const generateToken = () => {
     .slice(0, -1);
 };
 
+const getProviderLogo = (category, providerCode) => {
+  const provider = PROVIDERS[category]?.find(p => p.code === providerCode);
+  return provider?.logo || '📦';
+};
+
+const getProviderColor = (category, providerCode) => {
+  const provider = PROVIDERS[category]?.find(p => p.code === providerCode);
+  return provider?.color || '#6366F1';
+};
+
+// ─── Controller Functions ──────────────────────────────────────────────────────
+
 // GET /api/bills/providers/:category
 exports.getProviders = (req, res) => {
   const { category } = req.params;
   const list = PROVIDERS[category];
-  if (!list) return res.status(400).json({ success: false, message: 'Unknown category' });
+  if (!list) {
+    return res.status(400).json({ success: false, message: 'Unknown category' });
+  }
   res.json({ success: true, data: list });
 };
 
@@ -136,10 +156,14 @@ exports.getProviders = (req, res) => {
 exports.getPlans = (req, res) => {
   const { category, providerCode } = req.params;
   let plans = null;
-  if (category === 'data') plans = DATA_PLANS[providerCode?.toUpperCase()];
-  if (category === 'tv') plans = TV_PLANS[providerCode?.toUpperCase()];
-  if (!plans) return res.json({ success: true, data: [] });
-  res.json({ success: true, data: plans });
+  
+  if (category === 'data') {
+    plans = DATA_PLANS[providerCode?.toUpperCase()] || [];
+  } else if (category === 'tv') {
+    plans = TV_PLANS[providerCode?.toUpperCase()] || [];
+  }
+  
+  res.json({ success: true, data: plans || [] });
 };
 
 // POST /api/bills/verify-recipient
@@ -148,10 +172,14 @@ exports.verifyRecipient = async (req, res) => {
     const { category, provider, recipient } = req.body;
 
     if (!recipient || recipient.length < 6) {
-      return res.status(400).json({ success: false, message: 'Invalid recipient identifier' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid recipient identifier' 
+      });
     }
 
     let recipientName = null;
+    
     if (category === 'electricity') {
       const names = ['JOHN DOE', 'MARY JOHNSON', 'EMEKA OKAFOR', 'BLESSING ADEYEMI', 'CHIDI NWOSU'];
       recipientName = names[Math.floor(Math.random() * names.length)];
@@ -165,6 +193,8 @@ exports.verifyRecipient = async (req, res) => {
       recipientName = usernames[Math.floor(Math.random() * usernames.length)];
     } else if (category === 'education') {
       recipientName = 'CANDIDATE';
+    } else if (category === 'airtime' || category === 'data') {
+      recipientName = 'MOBILE SUBSCRIBER';
     }
 
     res.json({
@@ -178,6 +208,7 @@ exports.verifyRecipient = async (req, res) => {
       },
     });
   } catch (err) {
+    console.error('Verify recipient error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -201,11 +232,15 @@ exports.payBill = async (req, res) => {
 
     const userId = req.user._id;
 
-    // Validate PIN
-    const user = await User.findById(userId).session(session);
-    if (!user) throw new Error('User not found');
+    // Get user with PIN field
+    const user = await User.findById(userId).select('+transactionPin').session(session);
+    if (!user) {
+      throw new Error('User not found');
+    }
     
-    if (!user.transactionPin) {
+    // Check if PIN is set
+    if (!user.hasSetTransactionPin || !user.transactionPin) {
+      await session.abortTransaction();
       return res.status(400).json({ 
         success: false, 
         message: 'Transaction PIN not set', 
@@ -213,22 +248,31 @@ exports.payBill = async (req, res) => {
       });
     }
 
+    // Verify PIN
     const pinMatch = await bcrypt.compare(pin, user.transactionPin);
     if (!pinMatch) {
       await session.abortTransaction();
-      return res.status(401).json({ success: false, message: 'Invalid transaction PIN' });
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid transaction PIN' 
+      });
     }
 
     // Validate amount
     const numAmount = Number(amount);
-    if (!numAmount || numAmount <= 0) throw new Error('Invalid amount');
+    if (!numAmount || numAmount <= 0) {
+      throw new Error('Invalid amount');
+    }
 
     const fee = 0;
     const totalDeducted = numAmount + fee;
 
     if (user.balance < totalDeducted) {
       await session.abortTransaction();
-      return res.status(400).json({ success: false, message: 'Insufficient balance' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Insufficient balance' 
+      });
     }
 
     // Deduct balance
@@ -238,6 +282,21 @@ exports.payBill = async (req, res) => {
 
     // Generate token for electricity
     const token = category === 'electricity' ? generateToken() : undefined;
+
+    // Get provider details
+    const providerInfo = PROVIDERS[category]?.find(p => p.code === provider);
+    const providerName = providerInfo?.name || provider;
+    const providerLogo = providerInfo?.logo || '📦';
+
+    // Get plan details if applicable
+    let planName = null;
+    if (plan) {
+      if (category === 'data') {
+        planName = DATA_PLANS[provider]?.find(p => p.code === plan)?.name;
+      } else if (category === 'tv') {
+        planName = TV_PLANS[provider]?.find(p => p.code === plan)?.name;
+      }
+    }
 
     // Create Bill record
     const [bill] = await Bill.create(
@@ -266,7 +325,7 @@ exports.payBill = async (req, res) => {
         user: userId,
         type: 'debit',
         amount: totalDeducted,
-        description: description || `${category.charAt(0).toUpperCase() + category.slice(1)} — ${provider}`,
+        description: description || `${category.charAt(0).toUpperCase() + category.slice(1)} — ${providerName}`,
         status: 'successful',
         reference: bill.reference,
         balanceBefore,
@@ -291,9 +350,10 @@ exports.payBill = async (req, res) => {
         reference: bill.reference,
         category,
         provider,
-        providerName: PROVIDERS[category]?.find(p => p.code === provider)?.name || provider,
+        providerName,
+        providerLogo,
         plan: bill.plan,
-        planName: plan ? (DATA_PLANS[provider] || TV_PLANS[provider])?.find(p => p.code === plan)?.name : null,
+        planName,
         recipient,
         recipientName: bill.recipientName,
         amount: numAmount,
@@ -309,7 +369,10 @@ exports.payBill = async (req, res) => {
   } catch (err) {
     await session.abortTransaction();
     console.error('Bill payment error:', err);
-    res.status(500).json({ success: false, message: err.message || 'Payment failed. Please try again.' });
+    res.status(500).json({ 
+      success: false, 
+      message: err.message || 'Payment failed. Please try again.' 
+    });
   } finally {
     session.endSession();
   }
@@ -320,7 +383,9 @@ exports.getBillHistory = async (req, res) => {
   try {
     const { page = 1, limit = 20, category } = req.query;
     const filter = { user: req.user._id };
-    if (category && category !== 'all') filter.category = category;
+    if (category && category !== 'all') {
+      filter.category = category;
+    }
 
     const [bills, total] = await Promise.all([
       Bill.find(filter)
@@ -331,11 +396,16 @@ exports.getBillHistory = async (req, res) => {
       Bill.countDocuments(filter),
     ]);
 
-    // Add provider names to bills
-    const enrichedBills = bills.map(bill => ({
-      ...bill,
-      providerName: PROVIDERS[bill.category]?.find(p => p.code === bill.provider)?.name || bill.provider,
-    }));
+    // Enrich bills with provider info
+    const enrichedBills = bills.map(bill => {
+      const providerInfo = PROVIDERS[bill.category]?.find(p => p.code === bill.provider);
+      return {
+        ...bill,
+        providerName: providerInfo?.name || bill.provider,
+        providerLogo: providerInfo?.logo || '📦',
+        providerColor: providerInfo?.color || '#6366F1',
+      };
+    });
 
     res.json({
       success: true,
@@ -345,6 +415,7 @@ exports.getBillHistory = async (req, res) => {
       pages: Math.ceil(total / limit),
     });
   } catch (err) {
+    console.error('Get bill history error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
