@@ -213,6 +213,7 @@ exports.verifyRecipient = async (req, res) => {
   }
 };
 
+
 // POST /api/bills/pay
 exports.payBill = async (req, res) => {
   const session = await require('mongoose').startSession();
@@ -286,17 +287,6 @@ exports.payBill = async (req, res) => {
     // Get provider details
     const providerInfo = PROVIDERS[category]?.find(p => p.code === provider);
     const providerName = providerInfo?.name || provider;
-    const providerLogo = providerInfo?.logo || '📦';
-
-    // Get plan details if applicable
-    let planName = null;
-    if (plan) {
-      if (category === 'data') {
-        planName = DATA_PLANS[provider]?.find(p => p.code === plan)?.name;
-      } else if (category === 'tv') {
-        planName = TV_PLANS[provider]?.find(p => p.code === plan)?.name;
-      }
-    }
 
     // Create Bill record
     const [bill] = await Bill.create(
@@ -319,10 +309,10 @@ exports.payBill = async (req, res) => {
       { session }
     );
 
-    // Create Transaction record
+    // ✅ FIXED: Create Transaction record with correct field name
     await Transaction.create(
       [{
-        user: userId,
+        userId: userId,  // ✅ Changed from 'user' to 'userId'
         type: 'debit',
         amount: totalDeducted,
         description: description || `${category.charAt(0).toUpperCase() + category.slice(1)} — ${providerName}`,
@@ -351,9 +341,7 @@ exports.payBill = async (req, res) => {
         category,
         provider,
         providerName,
-        providerLogo,
         plan: bill.plan,
-        planName,
         recipient,
         recipientName: bill.recipientName,
         amount: numAmount,
