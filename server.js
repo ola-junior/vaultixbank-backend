@@ -20,8 +20,7 @@ const authRoutes = require('./Server/routes/auth');
 const userRoutes = require('./Server/routes/user');
 const transactionRoutes = require('./Server/routes/transaction');
 const notificationRoutes = require('./Server/routes/notification');
-// ❌ REMOVE THIS LINE - security routes are already in userRoutes
-// const securityRoutes = require('./Server/routes/security');
+const billRoutes = require('./Server/routes/bills'); // ✅ Added bills routes
 
 const app = express();
 
@@ -96,13 +95,13 @@ if (rateLimit) {
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'uploads');
 const profilesDir = path.join(uploadsDir, 'profiles');
+const bannersDir = path.join(uploadsDir, 'banners');
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(profilesDir)) {
-  fs.mkdirSync(profilesDir, { recursive: true });
-}
+[uploadsDir, profilesDir, bannersDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
 // Serve static files
 app.use('/uploads', (req, res, next) => {
@@ -123,8 +122,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
-// ❌ REMOVE THIS - security routes are already in userRoutes
-// app.use('/api/security', securityRoutes);
+app.use('/api/bills', billRoutes); // ✅ Added bills routes
 
 // Health check
 app.get('/health', (req, res) => {
@@ -148,7 +146,8 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       user: '/api/user',
       transactions: '/api/transactions',
-      notifications: '/api/notifications'
+      notifications: '/api/notifications',
+      bills: '/api/bills' // ✅ Added to list
     },
     health: '/health'
   });
@@ -156,6 +155,7 @@ app.get('/', (req, res) => {
 
 // 404 Handler
 app.use((req, res) => {
+  console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: `Route ${req.method} ${req.originalUrl} not found`
@@ -231,13 +231,18 @@ const startServer = async () => {
       
       // Log all registered routes for debugging
       console.log(`\n📋 Registered Routes:`);
-      console.log(`   POST /api/user/set-pin`);
-      console.log(`   PUT  /api/user/change-pin`);
-      console.log(`   POST /api/user/verify-pin`);
-      console.log(`   GET  /api/user/has-pin`);
-      console.log(`   POST /api/user/2fa/enable`);
-      console.log(`   POST /api/user/2fa/verify`);
-      console.log(`   POST /api/user/2fa/disable`);
+      console.log(`   POST   /api/user/set-pin`);
+      console.log(`   PUT    /api/user/change-pin`);
+      console.log(`   POST   /api/user/verify-pin`);
+      console.log(`   GET    /api/user/has-pin`);
+      console.log(`   POST   /api/user/2fa/enable`);
+      console.log(`   POST   /api/user/2fa/verify`);
+      console.log(`   POST   /api/user/2fa/disable`);
+      console.log(`   GET    /api/bills/providers/:category`);
+      console.log(`   GET    /api/bills/plans/:category/:providerCode`);
+      console.log(`   POST   /api/bills/verify-recipient`);
+      console.log(`   POST   /api/bills/pay`);
+      console.log(`   GET    /api/bills/history`);
       console.log(`${'='.repeat(50)}\n`);
     });
 
