@@ -55,6 +55,70 @@ const PROVIDERS = {
     { code: 'SWIFT', name: 'Swift', logo: '⚡', color: '#1565C0' },
     { code: 'IPNX', name: 'ipNX', logo: '🔷', color: '#0277BD' },
   ],
+  shopping: [
+    { code: 'JUMIA', name: 'Jumia', logo: '🛍️', color: '#F68B1E' },
+    { code: 'KONGA', name: 'Konga', logo: '📦', color: '#ED017F' },
+    { code: 'AMAZON', name: 'Amazon', logo: '📦', color: '#FF9900' },
+    { code: 'JIJI', name: 'Jiji', logo: '🏷️', color: '#00B53F' },
+  ],
+  gaming: [
+    { code: 'STEAM', name: 'Steam', logo: '🎮', color: '#171A21' },
+    { code: 'PLAYSTATION', name: 'PlayStation', logo: '🎮', color: '#003791' },
+    { code: 'XBOX', name: 'Xbox', logo: '🎮', color: '#107C10' },
+    { code: 'RIOT', name: 'Riot Games', logo: '🎮', color: '#D13639' },
+  ],
+  events: [
+    { code: 'TICKETMASTER', name: 'Ticketmaster', logo: '🎫', color: '#026CDF' },
+    { code: 'EVENTBRITE', name: 'Eventbrite', logo: '🎪', color: '#F05537' },
+    { code: 'NATIVEWORLD', name: 'Native World', logo: '🎵', color: '#FF6B35' },
+  ],
+  flights: [
+    { code: 'AIRPEACE', name: 'Air Peace', logo: '✈️', color: '#004B87' },
+    { code: 'ARIK', name: 'Arik Air', logo: '✈️', color: '#E31837' },
+    { code: 'DANA', name: 'Dana Air', logo: '✈️', color: '#009640' },
+    { code: 'IBOM', name: 'Ibom Air', logo: '✈️', color: '#1A5F7A' },
+  ],
+  hotels: [
+    { code: 'TRANSCORP', name: 'Transcorp Hilton', logo: '🏨', color: '#004080' },
+    { code: 'EKO', name: 'Eko Hotels', logo: '🏨', color: '#8B0000' },
+    { code: 'RADISSON', name: 'Radisson Blu', logo: '🏨', color: '#003366' },
+    { code: 'MARRIOTT', name: 'Marriott', logo: '🏨', color: '#B22222' },
+  ],
+  travel: [
+    { code: 'TRAVELSTART', name: 'Travelstart', logo: '🌍', color: '#00A9E0' },
+    { code: 'WAKANOW', name: 'Wakanow', logo: '🌍', color: '#E31837' },
+    { code: 'TRIPADVISOR', name: 'TripAdvisor', logo: '🌍', color: '#00AF87' },
+  ],
+  carRental: [
+    { code: 'AVIS', name: 'Avis', logo: '🚗', color: '#D40000' },
+    { code: 'HERTZ', name: 'Hertz', logo: '🚗', color: '#FFD700' },
+    { code: 'EUROPCAR', name: 'Europcar', logo: '🚗', color: '#009640' },
+  ],
+  movies: [
+    { code: 'FILMHOUSE', name: 'Filmhouse Cinemas', logo: '🎬', color: '#E50914' },
+    { code: 'SILVERBIRD', name: 'Silverbird', logo: '🎬', color: '#1A237E' },
+    { code: 'GENESIS', name: 'Genesis Cinemas', logo: '🎬', color: '#FF6F00' },
+  ],
+  music: [
+    { code: 'SPOTIFY', name: 'Spotify', logo: '🎵', color: '#1DB954' },
+    { code: 'APPLEMUSIC', name: 'Apple Music', logo: '🎵', color: '#FA2C5A' },
+    { code: 'BOOMPLAY', name: 'Boomplay', logo: '🎵', color: '#FF6B00' },
+  ],
+  dining: [
+    { code: 'UBEREATS', name: 'Uber Eats', logo: '🍔', color: '#06C167' },
+    { code: 'CHOWDECK', name: 'Chowdeck', logo: '🍕', color: '#FF6B00' },
+    { code: 'GLOVO', name: 'Glovo', logo: '🍔', color: '#FFC244' },
+  ],
+  gifts: [
+    { code: 'AMAZONGC', name: 'Amazon Gift Card', logo: '🎁', color: '#FF9900' },
+    { code: 'STEAMGC', name: 'Steam Gift Card', logo: '🎁', color: '#171A21' },
+    { code: 'ITUNESGC', name: 'iTunes Gift Card', logo: '🎁', color: '#007AFF' },
+  ],
+  healthcare: [
+    { code: 'LAGOON', name: 'Lagoon Hospitals', logo: '🏥', color: '#0066B3' },
+    { code: 'REDDINGTON', name: 'Reddington Hospital', logo: '🏥', color: '#CC0000' },
+    { code: 'EKO_HOSPITAL', name: 'Eko Hospital', logo: '🏥', color: '#008080' },
+  ],
 };
 
 const DATA_PLANS = {
@@ -193,8 +257,10 @@ exports.verifyRecipient = async (req, res) => {
       recipientName = usernames[Math.floor(Math.random() * usernames.length)];
     } else if (category === 'education') {
       recipientName = 'CANDIDATE';
-    } else if (category === 'airtime' || category === 'data') {
-      recipientName = 'MOBILE SUBSCRIBER';
+    } else if (category === 'airtime' || category === 'data' || category === 'internet') {
+      recipientName = 'SUBSCRIBER';
+    } else {
+      recipientName = 'VERIFIED CUSTOMER';
     }
 
     res.json({
@@ -212,7 +278,6 @@ exports.verifyRecipient = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
 
 // POST /api/bills/pay
 exports.payBill = async (req, res) => {
@@ -309,10 +374,10 @@ exports.payBill = async (req, res) => {
       { session }
     );
 
-    // ✅ FIXED: Create Transaction record with correct field name
+    // Create Transaction record
     await Transaction.create(
       [{
-        userId: userId,  // ✅ Changed from 'user' to 'userId'
+        userId: userId,
         type: 'debit',
         amount: totalDeducted,
         description: description || `${category.charAt(0).toUpperCase() + category.slice(1)} — ${providerName}`,
