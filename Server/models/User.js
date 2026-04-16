@@ -27,6 +27,140 @@ const SessionSchema = new mongoose.Schema({
   }
 });
 
+const SavingsSchema = new mongoose.Schema({
+  planId: {
+    type: String,
+    required: true
+  },
+  planName: {
+    type: String,
+    required: true
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  interestRate: {
+    type: Number,
+    required: true
+  },
+  lockPeriod: {
+    type: Number,
+    default: 0
+  },
+  startDate: {
+    type: Date,
+    default: Date.now
+  },
+  maturityDate: {
+    type: Date
+  },
+  status: {
+    type: String,
+    enum: ['active', 'matured', 'withdrawn'],
+    default: 'active'
+  },
+  withdrawalDate: Date,
+  interestEarned: {
+    type: Number,
+    default: 0
+  }
+});
+
+const LoanSchema = new mongoose.Schema({
+  planId: {
+    type: String,
+    required: true
+  },
+  planName: {
+    type: String,
+    required: true
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  interestRate: {
+    type: Number,
+    required: true
+  },
+  tenure: {
+    type: Number,
+    required: true
+  },
+  startDate: {
+    type: Date,
+    default: Date.now
+  },
+  dueDate: {
+    type: Date
+  },
+  status: {
+    type: String,
+    enum: ['active', 'paid', 'overdue', 'defaulted'],
+    default: 'active'
+  },
+  amountRepaid: {
+    type: Number,
+    default: 0
+  },
+  totalRepayable: {
+    type: Number
+  },
+  repaymentDate: Date
+});
+
+const DonationSchema = new mongoose.Schema({
+  cause: {
+    type: String,
+    default: 'General Support'
+  },
+  amount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  program: {
+    type: String,
+    default: 'Play4AChild'
+  },
+  date: {
+    type: Date,
+    default: Date.now
+  },
+  reference: String
+});
+
+const InsuranceSchema = new mongoose.Schema({
+  planId: {
+    type: String,
+    required: true
+  },
+  planName: {
+    type: String,
+    required: true
+  },
+  premium: {
+    type: Number,
+    required: true
+  },
+  coverage: String,
+  startDate: {
+    type: Date,
+    default: Date.now
+  },
+  expiryDate: Date,
+  status: {
+    type: String,
+    enum: ['active', 'expired', 'cancelled'],
+    default: 'active'
+  },
+  policyNumber: String,
+  quoteRef: String
+});
+
 const UserSchema = new mongoose.Schema({
   // Basic Info
   name: {
@@ -89,7 +223,7 @@ const UserSchema = new mongoose.Schema({
     default: 'Active'
   },
   
-  // Security Features - FIXED: Removed duplicate hasPin, using hasSetTransactionPin instead
+  // Security Features
   transactionPin: {
     type: String,
     select: false,
@@ -137,6 +271,12 @@ const UserSchema = new mongoose.Schema({
     default: 0
   },
   lockUntil: Date,
+  
+  // Financial Features
+  savings: [SavingsSchema],
+  loans: [LoanSchema],
+  donations: [DonationSchema],
+  insurance: [InsuranceSchema],
   
   // OAuth
   firebaseUid: {
@@ -202,6 +342,10 @@ const UserSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// =============================================
+// VIRTUALS
+// =============================================
+
 // Virtual for full profile
 UserSchema.virtual('profile').get(function() {
   return {
@@ -221,6 +365,29 @@ UserSchema.virtual('profile').get(function() {
   };
 });
 
+// Virtual for total savings
+UserSchema.virtual('totalSavings').get(function() {
+  return this.savings
+    .filter(s => s.status === 'active')
+    .reduce((total, s) => total + s.amount, 0);
+});
+
+// Virtual for total loans
+UserSchema.virtual('totalLoans').get(function() {
+  return this.loans
+    .filter(l => l.status === 'active')
+    .reduce((total, l) => total + l.amount, 0);
+});
+
+// Virtual for total donations
+UserSchema.virtual('totalDonations').get(function() {
+  return this.donations.reduce((total, d) => total + d.amount, 0);
+});
+
+// =============================================
+// MIDDLEWARE
+// =============================================
+
 // Hash password before save
 UserSchema.pre('save', async function(next) {
   if (!this.isModified('password') || !this.password) return next();
@@ -237,6 +404,38 @@ UserSchema.pre('save', async function(next) {
   this.transactionPin = await bcrypt.hash(this.transactionPin, salt);
   next();
 });
+
+// Calculate loan due dates and total repayable
+UserSchema.pre('save', function(next) {
+  if (this.isModified('loans')) {
+    this.loans.forEach(loan => {
+      if (!loan.dueDate) {
+        loan.dueDate = new Date(Date.now() + loan.tenure * 24 * 60 * 60 * 1000);
+      }
+      if (!loan.totalRepayable) {
+        const interest = (loan.amount * loan.interestRate) / 100;
+        loan.totalRepayable = loan.amount + interest;
+      }
+    });
+  }
+  next();
+});
+
+// Calculate savings maturity dates
+UserSchema.pre('save', function(next) {
+  if (this.isModified('savings')) {
+    this.savings.forEach(saving => {
+      if (!saving.maturityDate && saving.lockPeriod > 0) {
+        saving.maturityDate = new Date(Date.now() + saving.lockPeriod * 24 * 60 * 60 * 1000);
+      }
+    });
+  }
+  next();
+});
+
+// =============================================
+// METHODS
+// =============================================
 
 // Sign JWT
 UserSchema.methods.getSignedJwtToken = function() {
@@ -322,6 +521,59 @@ UserSchema.methods.removeSession = async function(sessionId) {
   this.sessions = this.sessions.filter(s => s._id.toString() !== sessionId);
   return this.save();
 };
+
+// Add savings
+UserSchema.methods.addSavings = async function(savingsData) {
+  this.savings.push(savingsData);
+  return this.save();
+};
+
+// Add loan
+UserSchema.methods.addLoan = async function(loanData) {
+  this.loans.push(loanData);
+  return this.save();
+};
+
+// Add donation
+UserSchema.methods.addDonation = async function(donationData) {
+  this.donations.push(donationData);
+  return this.save();
+};
+
+// Add insurance
+UserSchema.methods.addInsurance = async function(insuranceData) {
+  this.insurance.push(insuranceData);
+  return this.save();
+};
+
+// Get loan eligibility
+UserSchema.methods.getLoanEligibility = function() {
+  const accountAge = Date.now() - new Date(this.createdAt).getTime();
+  const accountAgeDays = Math.floor(accountAge / (1000 * 60 * 60 * 24));
+  
+  // Check active loans
+  const activeLoans = this.loans.filter(l => l.status === 'active');
+  const hasDefaulted = this.loans.some(l => l.status === 'defaulted');
+  
+  if (hasDefaulted) {
+    return { eligible: false, maxAmount: 0, reason: 'You have a defaulted loan' };
+  }
+  
+  if (activeLoans.length >= 2) {
+    return { eligible: false, maxAmount: 0, reason: 'Maximum active loans reached' };
+  }
+  
+  let maxAmount = 50000;
+  if (accountAgeDays > 30) maxAmount = 100000;
+  if (accountAgeDays > 90) maxAmount = 500000;
+  if (accountAgeDays > 180) maxAmount = 2000000;
+  
+  return { eligible: true, maxAmount, accountAgeDays };
+};
+
+// =============================================
+// STATICS
+// =============================================
 
 // Generate account number
 UserSchema.statics.generateAccountNumber = async function() {

@@ -21,6 +21,10 @@ const userRoutes = require('./Server/routes/user');
 const transactionRoutes = require('./Server/routes/transaction');
 const notificationRoutes = require('./Server/routes/notification');
 const billRoutes = require('./Server/routes/bills'); // ✅ Added bills routes
+const loanRoutes = require('./Server/routes/loans');
+const savingsRoutes = require('./Server/routes/savings');
+const insuranceRoutes = require('./Server/routes/insurance');
+const donationRoutes = require('./Server/routes/donations');
 
 const app = express();
 
@@ -123,6 +127,10 @@ app.use('/api/user', userRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/bills', billRoutes); // ✅ Added bills routes
+app.use('/api/loans', loanRoutes);
+app.use('/api/savings', savingsRoutes);
+app.use('/api/insurance', insuranceRoutes);
+app.use('/api/donations', donationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
