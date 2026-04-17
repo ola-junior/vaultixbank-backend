@@ -182,7 +182,7 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false
   },
-  
+
   // Profile Info
   phoneNumber: {
     type: String,
@@ -200,7 +200,7 @@ const UserSchema = new mongoose.Schema({
     type: String,
     default: null
   },
-  
+
   // Account Info
   accountNumber: {
     type: String,
@@ -222,7 +222,7 @@ const UserSchema = new mongoose.Schema({
     enum: ['Active', 'Inactive', 'Suspended', 'Closed'],
     default: 'Active'
   },
-  
+
   // Security Features
   transactionPin: {
     type: String,
@@ -249,7 +249,7 @@ const UserSchema = new mongoose.Schema({
       default: false
     }
   }],
-  
+
   // Email Verification
   isEmailVerified: {
     type: Boolean,
@@ -257,12 +257,12 @@ const UserSchema = new mongoose.Schema({
   },
   emailVerificationToken: String,
   emailVerificationExpire: Date,
-  
+
   // Password Management
   passwordUpdatedAt: Date,
   passwordResetToken: String,
   passwordResetExpire: Date,
-  
+
   // Session Management
   sessions: [SessionSchema],
   lastLogin: Date,
@@ -271,13 +271,13 @@ const UserSchema = new mongoose.Schema({
     default: 0
   },
   lockUntil: Date,
-  
+
   // Financial Features
   savings: [SavingsSchema],
   loans: [LoanSchema],
   donations: [DonationSchema],
   insurance: [InsuranceSchema],
-  
+
   // OAuth
   firebaseUid: {
     type: String,
@@ -292,7 +292,7 @@ const UserSchema = new mongoose.Schema({
     enum: ['local', 'google', 'facebook', 'twitter'],
     default: 'local'
   },
-  
+
   // Device Info
   registeredDevices: [{
     deviceId: String,
@@ -303,7 +303,21 @@ const UserSchema = new mongoose.Schema({
     },
     lastUsed: Date
   }],
-  
+  cards: [{
+    type: { type: String, enum: ['virtual', 'physical'] },
+    name: String,
+    cardNumber: String,
+    cvv: String,
+    expiry: String,
+    dailyLimit: Number,
+    balance: { type: Number, default: 0 },
+    spentToday: { type: Number, default: 0 },
+    status: { type: String, enum: ['active', 'blocked', 'expired'], default: 'active' },
+    frozen: { type: Boolean, default: false },
+    brand: String,
+    color: String,
+    createdAt: Date
+  }],
   // Notifications
   notificationPreferences: {
     email: {
@@ -331,12 +345,12 @@ const UserSchema = new mongoose.Schema({
       default: false
     }
   },
-  
+
   createdAt: {
     type: Date,
     default: Date.now
   }
-}, { 
+}, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
@@ -347,7 +361,7 @@ const UserSchema = new mongoose.Schema({
 // =============================================
 
 // Virtual for full profile
-UserSchema.virtual('profile').get(function() {
+UserSchema.virtual('profile').get(function () {
   return {
     name: this.name,
     email: this.email,
@@ -366,21 +380,21 @@ UserSchema.virtual('profile').get(function() {
 });
 
 // Virtual for total savings
-UserSchema.virtual('totalSavings').get(function() {
+UserSchema.virtual('totalSavings').get(function () {
   return this.savings
     .filter(s => s.status === 'active')
     .reduce((total, s) => total + s.amount, 0);
 });
 
 // Virtual for total loans
-UserSchema.virtual('totalLoans').get(function() {
+UserSchema.virtual('totalLoans').get(function () {
   return this.loans
     .filter(l => l.status === 'active')
     .reduce((total, l) => total + l.amount, 0);
 });
 
 // Virtual for total donations
-UserSchema.virtual('totalDonations').get(function() {
+UserSchema.virtual('totalDonations').get(function () {
   return this.donations.reduce((total, d) => total + d.amount, 0);
 });
 
@@ -389,7 +403,7 @@ UserSchema.virtual('totalDonations').get(function() {
 // =============================================
 
 // Hash password before save
-UserSchema.pre('save', async function(next) {
+UserSchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
@@ -398,7 +412,7 @@ UserSchema.pre('save', async function(next) {
 });
 
 // Hash transaction PIN before save
-UserSchema.pre('save', async function(next) {
+UserSchema.pre('save', async function (next) {
   if (!this.isModified('transactionPin') || !this.transactionPin) return next();
   const salt = await bcrypt.genSalt(10);
   this.transactionPin = await bcrypt.hash(this.transactionPin, salt);
@@ -406,7 +420,7 @@ UserSchema.pre('save', async function(next) {
 });
 
 // Calculate loan due dates and total repayable
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', function (next) {
   if (this.isModified('loans')) {
     this.loans.forEach(loan => {
       if (!loan.dueDate) {
@@ -422,7 +436,7 @@ UserSchema.pre('save', function(next) {
 });
 
 // Calculate savings maturity dates
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', function (next) {
   if (this.isModified('savings')) {
     this.savings.forEach(saving => {
       if (!saving.maturityDate && saving.lockPeriod > 0) {
@@ -438,28 +452,28 @@ UserSchema.pre('save', function(next) {
 // =============================================
 
 // Sign JWT
-UserSchema.methods.getSignedJwtToken = function() {
+UserSchema.methods.getSignedJwtToken = function () {
   return jwt.sign(
-    { id: this._id }, 
-    process.env.JWT_SECRET, 
+    { id: this._id },
+    process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRE || '30d' }
   );
 };
 
 // Match password
-UserSchema.methods.matchPassword = async function(enteredPassword) {
+UserSchema.methods.matchPassword = async function (enteredPassword) {
   if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
 // Match transaction PIN
-UserSchema.methods.matchTransactionPin = async function(enteredPin) {
+UserSchema.methods.matchTransactionPin = async function (enteredPin) {
   if (!this.transactionPin) return false;
   return await bcrypt.compare(enteredPin, this.transactionPin);
 };
 
 // Generate email verification token
-UserSchema.methods.getEmailVerificationToken = function() {
+UserSchema.methods.getEmailVerificationToken = function () {
   const verificationToken = crypto.randomBytes(32).toString('hex');
   this.emailVerificationToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
   this.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000;
@@ -467,7 +481,7 @@ UserSchema.methods.getEmailVerificationToken = function() {
 };
 
 // Generate password reset token
-UserSchema.methods.getPasswordResetToken = function() {
+UserSchema.methods.getPasswordResetToken = function () {
   const resetToken = crypto.randomBytes(32).toString('hex');
   this.passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
   this.passwordResetExpire = Date.now() + 10 * 60 * 1000;
@@ -475,30 +489,30 @@ UserSchema.methods.getPasswordResetToken = function() {
 };
 
 // Check if account is locked
-UserSchema.methods.isLocked = function() {
+UserSchema.methods.isLocked = function () {
   return !!(this.lockUntil && this.lockUntil > Date.now());
 };
 
 // Increment login attempts
-UserSchema.methods.incrementLoginAttempts = async function() {
+UserSchema.methods.incrementLoginAttempts = async function () {
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({
       $set: { loginAttempts: 1 },
       $unset: { lockUntil: 1 }
     });
   }
-  
+
   const updates = { $inc: { loginAttempts: 1 } };
-  
+
   if (this.loginAttempts + 1 >= 5 && !this.isLocked()) {
     updates.$set = { lockUntil: Date.now() + 30 * 60 * 1000 };
   }
-  
+
   return this.updateOne(updates);
 };
 
 // Reset login attempts
-UserSchema.methods.resetLoginAttempts = function() {
+UserSchema.methods.resetLoginAttempts = function () {
   return this.updateOne({
     $set: { loginAttempts: 0 },
     $unset: { lockUntil: 1 }
@@ -506,68 +520,68 @@ UserSchema.methods.resetLoginAttempts = function() {
 };
 
 // Add session
-UserSchema.methods.addSession = async function(sessionData) {
+UserSchema.methods.addSession = async function (sessionData) {
   this.sessions.push(sessionData);
-  
+
   if (this.sessions.length > 10) {
     this.sessions = this.sessions.slice(-10);
   }
-  
+
   return this.save();
 };
 
 // Remove session
-UserSchema.methods.removeSession = async function(sessionId) {
+UserSchema.methods.removeSession = async function (sessionId) {
   this.sessions = this.sessions.filter(s => s._id.toString() !== sessionId);
   return this.save();
 };
 
 // Add savings
-UserSchema.methods.addSavings = async function(savingsData) {
+UserSchema.methods.addSavings = async function (savingsData) {
   this.savings.push(savingsData);
   return this.save();
 };
 
 // Add loan
-UserSchema.methods.addLoan = async function(loanData) {
+UserSchema.methods.addLoan = async function (loanData) {
   this.loans.push(loanData);
   return this.save();
 };
 
 // Add donation
-UserSchema.methods.addDonation = async function(donationData) {
+UserSchema.methods.addDonation = async function (donationData) {
   this.donations.push(donationData);
   return this.save();
 };
 
 // Add insurance
-UserSchema.methods.addInsurance = async function(insuranceData) {
+UserSchema.methods.addInsurance = async function (insuranceData) {
   this.insurance.push(insuranceData);
   return this.save();
 };
 
 // Get loan eligibility
-UserSchema.methods.getLoanEligibility = function() {
+UserSchema.methods.getLoanEligibility = function () {
   const accountAge = Date.now() - new Date(this.createdAt).getTime();
   const accountAgeDays = Math.floor(accountAge / (1000 * 60 * 60 * 24));
-  
+
   // Check active loans
   const activeLoans = this.loans.filter(l => l.status === 'active');
   const hasDefaulted = this.loans.some(l => l.status === 'defaulted');
-  
+
   if (hasDefaulted) {
     return { eligible: false, maxAmount: 0, reason: 'You have a defaulted loan' };
   }
-  
+
   if (activeLoans.length >= 2) {
     return { eligible: false, maxAmount: 0, reason: 'Maximum active loans reached' };
   }
-  
+
   let maxAmount = 50000;
   if (accountAgeDays > 30) maxAmount = 100000;
   if (accountAgeDays > 90) maxAmount = 500000;
   if (accountAgeDays > 180) maxAmount = 2000000;
-  
+
   return { eligible: true, maxAmount, accountAgeDays };
 };
 
@@ -576,7 +590,7 @@ UserSchema.methods.getLoanEligibility = function() {
 // =============================================
 
 // Generate account number
-UserSchema.statics.generateAccountNumber = async function() {
+UserSchema.statics.generateAccountNumber = async function () {
   const prefix = '60';
   const accountNumber = prefix + Math.floor(10000000 + Math.random() * 90000000).toString();
   const existingUser = await this.findOne({ accountNumber });
@@ -585,7 +599,7 @@ UserSchema.statics.generateAccountNumber = async function() {
 };
 
 // Generate backup codes for 2FA
-UserSchema.methods.generateBackupCodes = function(count = 8) {
+UserSchema.methods.generateBackupCodes = function (count = 8) {
   const codes = [];
   for (let i = 0; i < count; i++) {
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
