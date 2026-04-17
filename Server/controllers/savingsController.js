@@ -106,3 +106,67 @@ exports.getSavings = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// @desc    Withdraw from savings
+// @route   POST /api/savings/withdraw/:savingsId
+// @access  Private
+exports.withdrawSavings = async (req, res) => {
+  try {
+    const { savingsId } = req.params;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const saving = user.savings.id(savingsId);
+    if (!saving) {
+      return res.status(404).json({ success: false, message: 'Savings not found' });
+    }
+
+    if (saving.status !== 'active') {
+      return res.status(400).json({ success: false, message: 'Savings already withdrawn' });
+    }
+
+    // Check lock period
+    if (saving.lockPeriod > 0) {
+      const maturityDate = new Date(saving.maturityDate);
+      if (maturityDate > new Date()) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Cannot withdraw before maturity date' 
+        });
+      }
+    }
+
+    // Calculate interest
+    const daysHeld = Math.floor((new Date() - new Date(saving.startDate)) / (1000 * 60 * 60 * 24));
+    const interestEarned = (saving.amount * saving.interestRate * daysHeld) / (365 * 100);
+    const totalWithdrawn = saving.amount + interestEarned;
+
+    // Update balance
+    user.balance = parseFloat((user.balance + totalWithdrawn).toFixed(2));
+    
+    // Update savings status
+    saving.status = 'withdrawn';
+    saving.withdrawalDate = new Date();
+    saving.interestEarned = parseFloat(interestEarned.toFixed(2));
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Savings withdrawn successfully',
+      data: {
+        amount: saving.amount,
+        interestEarned: parseFloat(interestEarned.toFixed(2)),
+        totalWithdrawn: parseFloat(totalWithdrawn.toFixed(2)),
+        newBalance: user.balance
+      }
+    });
+  } catch (err) {
+    console.error('Withdraw savings error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
