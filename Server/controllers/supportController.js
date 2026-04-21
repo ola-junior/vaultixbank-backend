@@ -17,26 +17,19 @@ exports.submitTicket = async (req, res) => {
       });
     }
 
-    // Auto-determine priority based on category
-    let priority = 'medium';
-    if (category === 'security') priority = 'high';
-    if (category === 'transaction') priority = 'high';
-    if (category === 'card') priority = 'high';
-
     // Create ticket
     const ticket = await Contact.create({
       user: userId,
       name: user.name,
       email: user.email,
-      category,
+      category: category || 'general',
       subject,
       message,
-      priority,
-      status: 'pending'
+      priority: category === 'security' || category === 'transaction' ? 'high' : 'medium',
+      status: 'open'
     });
 
-    // Log for monitoring
-    console.log(`🎫 New Ticket: ${ticket.ticketId} | ${subject} | Priority: ${priority}`);
+    console.log(`🎫 New Ticket: ${ticket.ticketId} | ${subject}`);
 
     res.json({
       success: true,
@@ -65,7 +58,7 @@ exports.getUserTickets = async (req, res) => {
   try {
     const tickets = await Contact.find({ user: req.user._id })
       .sort({ createdAt: -1 })
-      .select('ticketId subject category status priority createdAt updatedAt');
+      .select('ticketId subject category status priority createdAt updatedAt replies');
 
     res.json({
       success: true,
@@ -150,14 +143,12 @@ exports.replyToTicket = async (req, res) => {
       });
     }
 
-    // Add reply
     ticket.replies.push({
       message,
       repliedBy: user.name,
       isAdmin: false
     });
 
-    // Update status if pending
     if (ticket.status === 'resolved') {
       ticket.status = 'in_progress';
     }
@@ -233,14 +224,17 @@ exports.getTicketStats = async (req, res) => {
 
     const result = {
       total,
-      pending: 0,
+      open: 0,
       in_progress: 0,
       resolved: 0,
       closed: 0
     };
 
     stats.forEach(stat => {
-      result[stat._id] = stat.count;
+      if (stat._id === 'open') result.open = stat.count;
+      if (stat._id === 'in_progress') result.in_progress = stat.count;
+      if (stat._id === 'resolved') result.resolved = stat.count;
+      if (stat._id === 'closed') result.closed = stat.count;
     });
 
     res.json({
@@ -257,53 +251,40 @@ exports.getTicketStats = async (req, res) => {
   }
 };
 
+// =============================================
+// ADMIN FUNCTIONS
+// =============================================
+
 // @desc    Get ALL tickets (Admin only)
 // @route   GET /api/support/admin/tickets
 // @access  Admin
 exports.getAllTickets = async (req, res) => {
   try {
-    const { status, search } = req.query;
-    
-    let query = {};
-    if (status && status !== 'all') {
-      query.status = status;
-    }
-    if (search) {
-      query.$or = [
-        { subject: { $regex: search, $options: 'i' } },
-        { message: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { name: { $regex: search, $options: 'i' } },
-        { ticketId: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    const tickets = await Contact.find(query)
+    const tickets = await Contact.find()
       .sort({ createdAt: -1 })
-      .populate('user', 'name email accountNumber');
-    
+      .populate('user', 'name email');
+
     // Statistics
-    const stats = await Contact.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
-    
-    const statsObj = {};
-    stats.forEach(s => { statsObj[s._id] = s.count; });
-    
+    const stats = {
+      total: tickets.length,
+      open: tickets.filter(t => t.status === 'open').length,
+      in_progress: tickets.filter(t => t.status === 'in_progress').length,
+      resolved: tickets.filter(t => t.status === 'resolved').length,
+      closed: tickets.filter(t => t.status === 'closed').length
+    };
+
     res.json({ 
       success: true, 
       data: tickets,
-      stats: {
-        total: tickets.length,
-        open: statsObj.open || 0,
-        in_progress: statsObj.in_progress || 0,
-        resolved: statsObj.resolved || 0,
-        closed: statsObj.closed || 0
-      }
+      stats
     });
+
   } catch (err) {
     console.error('Admin get tickets error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch tickets: ' + err.message 
+    });
   }
 };
 
@@ -313,28 +294,28 @@ exports.getAllTickets = async (req, res) => {
 exports.updateTicketStatus = async (req, res) => {
   try {
     const { ticketId } = req.params;
-    const { status, assignedTo, priority } = req.body;
+    const { status } = req.body;
     
     const ticket = await Contact.findOne({ ticketId });
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found' });
     }
     
-    if (status) ticket.status = status;
-    if (assignedTo) ticket.assignedTo = assignedTo;
-    if (priority) ticket.priority = priority;
+    ticket.status = status;
     
     if (status === 'resolved') ticket.resolvedAt = new Date();
     if (status === 'closed') ticket.closedAt = new Date();
     
     await ticket.save();
     
-    console.log(`✅ Ticket ${ticketId} updated to ${status} by ${req.user.email}`);
-    
     res.json({ success: true, data: ticket });
+
   } catch (err) {
     console.error('Update ticket error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to update ticket: ' + err.message 
+    });
   }
 };
 
@@ -358,26 +339,26 @@ exports.adminReply = async (req, res) => {
     ticket.replies.push({
       message: message.trim(),
       repliedBy: 'Vaultix Support',
-      isAdmin: true,
-      repliedAt: new Date()
+      isAdmin: true
     });
     
-    // Auto-update status if open
     if (ticket.status === 'open') {
       ticket.status = 'in_progress';
     }
     
     await ticket.save();
     
-    console.log(`✅ Admin reply added to ticket ${ticketId} by ${req.user.email}`);
-    
     res.json({ 
       success: true, 
       data: ticket.replies[ticket.replies.length - 1],
       ticketStatus: ticket.status
     });
+
   } catch (err) {
     console.error('Admin reply error:', err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to send reply: ' + err.message 
+    });
   }
 };

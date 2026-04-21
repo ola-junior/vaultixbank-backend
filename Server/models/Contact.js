@@ -29,8 +29,8 @@ const ContactSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'resolved', 'closed'],
-    default: 'pending'
+    enum: ['open', 'in_progress', 'resolved', 'closed'],
+    default: 'open'
   },
   priority: {
     type: String,
@@ -61,7 +61,7 @@ const ContactSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Generate ticket ID before save
+// Generate ticket ID
 ContactSchema.pre('save', async function(next) {
   if (!this.ticketId) {
     const count = await mongoose.model('Contact').countDocuments();
