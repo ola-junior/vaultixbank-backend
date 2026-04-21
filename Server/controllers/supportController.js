@@ -256,3 +256,128 @@ exports.getTicketStats = async (req, res) => {
     });
   }
 };
+
+// @desc    Get ALL tickets (Admin only)
+// @route   GET /api/support/admin/tickets
+// @access  Admin
+exports.getAllTickets = async (req, res) => {
+  try {
+    const { status, search } = req.query;
+    
+    let query = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    if (search) {
+      query.$or = [
+        { subject: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
+        { ticketId: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const tickets = await Contact.find(query)
+      .sort({ createdAt: -1 })
+      .populate('user', 'name email accountNumber');
+    
+    // Statistics
+    const stats = await Contact.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    const statsObj = {};
+    stats.forEach(s => { statsObj[s._id] = s.count; });
+    
+    res.json({ 
+      success: true, 
+      data: tickets,
+      stats: {
+        total: tickets.length,
+        open: statsObj.open || 0,
+        in_progress: statsObj.in_progress || 0,
+        resolved: statsObj.resolved || 0,
+        closed: statsObj.closed || 0
+      }
+    });
+  } catch (err) {
+    console.error('Admin get tickets error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Update ticket status (Admin only)
+// @route   PUT /api/support/admin/tickets/:ticketId
+// @access  Admin
+exports.updateTicketStatus = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { status, assignedTo, priority } = req.body;
+    
+    const ticket = await Contact.findOne({ ticketId });
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+    
+    if (status) ticket.status = status;
+    if (assignedTo) ticket.assignedTo = assignedTo;
+    if (priority) ticket.priority = priority;
+    
+    if (status === 'resolved') ticket.resolvedAt = new Date();
+    if (status === 'closed') ticket.closedAt = new Date();
+    
+    await ticket.save();
+    
+    console.log(`✅ Ticket ${ticketId} updated to ${status} by ${req.user.email}`);
+    
+    res.json({ success: true, data: ticket });
+  } catch (err) {
+    console.error('Update ticket error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Admin reply to ticket
+// @route   POST /api/support/admin/tickets/:ticketId/reply
+// @access  Admin
+exports.adminReply = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+    const { message } = req.body;
+    
+    if (!message?.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply message required' });
+    }
+    
+    const ticket = await Contact.findOne({ ticketId });
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+    
+    ticket.replies.push({
+      message: message.trim(),
+      repliedBy: 'Vaultix Support',
+      isAdmin: true,
+      repliedAt: new Date()
+    });
+    
+    // Auto-update status if open
+    if (ticket.status === 'open') {
+      ticket.status = 'in_progress';
+    }
+    
+    await ticket.save();
+    
+    console.log(`✅ Admin reply added to ticket ${ticketId} by ${req.user.email}`);
+    
+    res.json({ 
+      success: true, 
+      data: ticket.replies[ticket.replies.length - 1],
+      ticketStatus: ticket.status
+    });
+  } catch (err) {
+    console.error('Admin reply error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
