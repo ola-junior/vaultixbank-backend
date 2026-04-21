@@ -327,26 +327,45 @@ exports.adminReply = async (req, res) => {
     const { ticketId } = req.params;
     const { message } = req.body;
     
+    console.log('📝 Admin reply attempt:', { ticketId, messageLength: message?.length });
+    
     if (!message?.trim()) {
       return res.status(400).json({ success: false, message: 'Reply message required' });
     }
     
-    const ticket = await Contact.findOne({ ticketId });
+    // ✅ Try finding by ticketId first, then by _id
+    let ticket = await Contact.findOne({ ticketId });
     if (!ticket) {
+      // If not found by ticketId, try by _id
+      ticket = await Contact.findById(ticketId);
+    }
+    
+    if (!ticket) {
+      console.log('❌ Ticket not found:', ticketId);
       return res.status(404).json({ success: false, message: 'Ticket not found' });
     }
     
+    // Initialize replies array if it doesn't exist
+    if (!ticket.replies) {
+      ticket.replies = [];
+    }
+    
+    // Add the reply
     ticket.replies.push({
       message: message.trim(),
       repliedBy: 'Vaultix Support',
-      isAdmin: true
+      isAdmin: true,
+      repliedAt: new Date()
     });
     
+    // Update status if open
     if (ticket.status === 'open') {
       ticket.status = 'in_progress';
     }
     
     await ticket.save();
+    
+    console.log('✅ Admin reply added to ticket:', ticket.ticketId || ticket._id);
     
     res.json({ 
       success: true, 
