@@ -379,23 +379,44 @@ UserSchema.virtual('profile').get(function () {
   };
 });
 
-// Virtual for total savings
+// Virtual for total savings - ✅ FIXED
 UserSchema.virtual('totalSavings').get(function () {
+  if (!this.savings || !Array.isArray(this.savings)) return 0;
   return this.savings
     .filter(s => s.status === 'active')
-    .reduce((total, s) => total + s.amount, 0);
+    .reduce((total, s) => total + (s.amount || 0), 0);
 });
 
-// Virtual for total loans
+// Virtual for total loans - ✅ FIXED
 UserSchema.virtual('totalLoans').get(function () {
+  if (!this.loans || !Array.isArray(this.loans)) return 0;
   return this.loans
     .filter(l => l.status === 'active')
-    .reduce((total, l) => total + l.amount, 0);
+    .reduce((total, l) => total + (l.amount || 0), 0);
 });
 
-// Virtual for total donations
+// Virtual for total donations - ✅ FIXED
 UserSchema.virtual('totalDonations').get(function () {
-  return this.donations.reduce((total, d) => total + d.amount, 0);
+  if (!this.donations || !Array.isArray(this.donations)) return 0;
+  return this.donations.reduce((total, d) => total + (d.amount || 0), 0);
+});
+
+// Virtual for total cards
+UserSchema.virtual('totalCards').get(function () {
+  if (!this.cards || !Array.isArray(this.cards)) return 0;
+  return this.cards.length;
+});
+
+// Virtual for active cards
+UserSchema.virtual('activeCards').get(function () {
+  if (!this.cards || !Array.isArray(this.cards)) return 0;
+  return this.cards.filter(c => c.status === 'active' && !c.frozen).length;
+});
+
+// Virtual for total card balance
+UserSchema.virtual('totalCardBalance').get(function () {
+  if (!this.cards || !Array.isArray(this.cards)) return 0;
+  return this.cards.reduce((total, c) => total + (c.balance || 0), 0);
 });
 
 // =============================================
