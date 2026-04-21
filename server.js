@@ -26,6 +26,7 @@ const savingsRoutes = require('./Server/routes/savings');
 const insuranceRoutes = require('./Server/routes/insurance');
 const donationRoutes = require('./Server/routes/donations');
 const cardRoutes = require('./Server/routes/cards');
+const supportRoutes = require('./Server/routes/support');
 
 const app = express();
 
@@ -133,6 +134,7 @@ app.use('/api/savings', savingsRoutes);
 app.use('/api/insurance', insuranceRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/cards', cardRoutes);
+app.use('/api/support', supportRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
