@@ -40,9 +40,16 @@ const TransactionSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  provider: {
+    type: String,
+    enum: ['paystack', 'monnify', 'internal', 'other'],
+    default: 'other'
+  },
   reference: {
     type: String,
-    unique: true
+    unique: true,
+    sparse: true,
+    index: true
   },
   balanceAfter: {
     type: Number

@@ -14,11 +14,11 @@ const {
 router.use(protect);
 
 router.get('/', getCards);
+router.get('/transactions', getCardTransactions);
 router.post('/create', createCard);
 router.post('/:cardId/fund', fundCard);
 router.post('/:cardId/withdraw', withdrawFromCard);
 router.post('/:cardId/toggle-freeze', toggleFreeze);
 router.delete('/:cardId', deleteCard);
-router.get('/transactions', getCardTransactions);
 
 module.exports = router;

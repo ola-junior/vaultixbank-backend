@@ -33,6 +33,7 @@ const paystackBankCodes = {
   'OPAY': '999992', // OPay
   'PALMPAY': '999991', // PalmPay
   'KUDABANK': '999990', // Kuda Bank
+  'MONIEPOINT': '50515', // Moniepoint MFB
   'MONEYS': '999989', // Moneypoint
   'ALAT': '999988', // ALAT by Wema
 };
@@ -61,6 +62,7 @@ const bankNames = {
   'OPAY': 'OPay',
   'PALMPAY': 'PalmPay',
   'KUDABANK': 'Kuda Bank',
+  'MONIEPOINT': 'Moniepoint MFB',
   'MONEYS': 'Moneypoint',
   'ALAT': 'ALAT by Wema',
   'VAULTIX': 'Vaultix',
@@ -145,13 +147,7 @@ const verifyBankAccount = async (accountNumber, bankCode, userId = null) => {
     if (!accountNumber || accountNumber.length !== 10 || !/^\d+$/.test(accountNumber)) {
       return {
         success: false,
-        message: 'Invalid account number format',
-        data: {
-          accountName: `${getBankName(bankCode)} Account Holder`,
-          accountNumber: accountNumber,
-          bankName: getBankName(bankCode),
-          isFallback: true
-        }
+        message: 'Invalid account number format.'
       };
     }
     
@@ -170,36 +166,23 @@ const verifyBankAccount = async (accountNumber, bankCode, userId = null) => {
       const allowed = checkRateLimit(userId);
       if (!allowed) {
         console.log('⚠️ Rate limit exceeded for user:', userId);
-        return {
-          success: true,
-          rateLimited: true,
-          data: {
-            accountName: `${getBankName(bankCode)} Account Holder`,
-            accountNumber: accountNumber,
-            bankName: getBankName(bankCode),
-            isFallback: true
-          }
-        };
+        return { success: false, message: 'Too many account verification attempts. Try again shortly.' };
       }
     }
     
     // Check if Paystack is configured
     if (!process.env.PAYSTACK_SECRET_KEY) {
-      console.log('⚠️ Paystack not configured. Using fallback verification.');
-      const fallbackData = {
-        accountName: `${getBankName(bankCode)} Account Holder`,
-        accountNumber: accountNumber,
-        bankName: getBankName(bankCode),
-        isFallback: true
-      };
-      
-      // Cache fallback for shorter time
-      setCachedVerification(accountNumber, bankCode, fallbackData);
-      
       return {
-        success: true,
-        data: fallbackData,
-        usingFallback: true
+        success: false,
+        message: 'Account verification is unavailable because Paystack is not configured.'
+      };
+    }
+
+    // Reject if the bank code has no known Paystack mapping
+    if (!paystackBankCodes[bankCode]) {
+      return {
+        success: false,
+        message: 'The selected bank is not supported for account verification.'
       };
     }
 
@@ -254,21 +237,15 @@ const verifyBankAccount = async (accountNumber, bankCode, userId = null) => {
       const status = error.response.status;
       
       if (status === 429) {
-        console.log('⚠️ Rate limit exceeded. Using fallback verification.');
+        return { success: false, message: 'Paystack rate limit reached. Try again shortly.' };
       } else if (status === 400) {
-        console.log('⚠️ Invalid request to Paystack. Using fallback verification.');
+        return { success: false, message: 'The account is not registered with the selected bank.' };
       } else if (status === 401) {
-        console.log('⚠️ Invalid Paystack API key. Using fallback verification.');
+        return { success: false, message: 'Bank verification is temporarily unavailable.' };
       } else if (status === 404) {
         return {
           success: false,
-          message: 'Account not found or cannot be verified',
-          data: {
-            accountName: `${getBankName(bankCode)} Account Holder`,
-            accountNumber: accountNumber,
-            bankName: getBankName(bankCode),
-            isFallback: true
-          }
+          message: 'The account is not registered with the selected bank.'
         };
       }
     } else if (error.code === 'ECONNABORTED') {
@@ -277,26 +254,9 @@ const verifyBankAccount = async (accountNumber, bankCode, userId = null) => {
       console.log('⚠️ Network error. Cannot reach Paystack. Using fallback verification.');
     }
     
-    // Return fallback verification
-    const fallbackData = {
-      accountName: `${getBankName(bankCode)} Account Holder`,
-      accountNumber: accountNumber,
-      bankName: getBankName(bankCode),
-      isFallback: true
-    };
-    
-    // Cache fallback for shorter time (5 minutes)
-    const cacheKey = `${bankCode}:${accountNumber}`;
-    verificationCache.set(cacheKey, {
-      data: fallbackData,
-      expiry: Date.now() + (5 * 60 * 1000) // 5 minutes for fallback
-    });
-    
     return {
-      success: true,
-      data: fallbackData,
-      usingFallback: true,
-      errorReason: error.message
+      success: false,
+      message: 'The account could not be verified with the selected bank.'
     };
   }
 };

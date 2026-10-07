@@ -27,11 +27,17 @@ const insuranceRoutes = require('./Server/routes/insurance');
 const donationRoutes = require('./Server/routes/donations');
 const cardRoutes = require('./Server/routes/cards');
 const supportRoutes = require('./Server/routes/support');
+const paystackRoutes = require('./Server/routes/paystack');
+const monnifyRoutes = require('./Server/routes/monnify');
 
 const app = express();
 
 // Trust proxy (required for deployment)
 app.set('trust proxy', 1);
+
+// Paystack signs the exact raw request body.
+app.use('/api/paystack/webhook', paystackRoutes);
+app.use('/api/monnify/webhook', monnifyRoutes);
 
 // Body parser with increased limits
 app.use(express.json({ limit: '10mb' }));
@@ -40,8 +46,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // CORS Configuration
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://localhost:5174',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
   'https://vaultix-frontend.vercel.app',
   'https://vaultixbank-frontend.vercel.app',
   'https://vaultixbank-frontend-git-main-abdullahis-projects-646ad5fb.vercel.app',
@@ -158,6 +166,7 @@ app.get('/', (req, res) => {
       auth: '/api/auth',
       user: '/api/user',
       transactions: '/api/transactions',
+      paystackWebhook: '/api/paystack/webhook',
       notifications: '/api/notifications',
       bills: '/api/bills' // ✅ Added to list
     },
